@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AuthPage } from './components/AuthPage';
 import { Sidebar, Page } from './components/Sidebar';
-import { getCurrentSession, signOut, AuthSession } from './utils/localAuth';
+import { getCurrentSession, signOut, loadStudentProfile, loadProgress, loadStreak, saveAllProgress, saveStreak, saveStudentProfile, AuthSession } from './utils/cloudAuth';
 import { Loader } from 'lucide-react';
 
 // ─── Types (exported for use in child components) ─────────────────────────────
@@ -48,19 +48,7 @@ import { PendingPapers } from './components/PendingPapers';
 import { PredictedGrades } from './components/PredictedGrades';
 import { SettingsPage } from './components/SettingsPage';
 import { GamificationPage } from './components/GamificationPage';
-
-// Placeholder for pages not yet built (Batches 3–4)
-function PlaceholderPage({ name }: { name: string }) {
-  return (
-    <div style={{ padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16 }}>
-      <div style={{ width: 64, height: 64, borderRadius: 16, background: 'linear-gradient(135deg, var(--accent-violet), var(--accent-cyan))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 0 30px var(--glow-violet)' }}>⚡</div>
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', color: 'var(--text-primary)' }}>{name}</h2>
-      <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>Coming in the next batch — stay tuned!</p>
-    </div>
-  );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+import { HardestPapers } from './components/HardestPapers';
 
 function getDefaultStreak(): StreakData {
   return { currentStreak: 0, longestStreak: 0, lastStudyDate: '', totalXP: 0, studyDates: [] };
@@ -72,8 +60,7 @@ function updateStreakOnRecord(streak: StreakData): StreakData {
 
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const newStreak = streak.lastStudyDate === yesterday || streak.lastStudyDate === today
-    ? streak.currentStreak + 1
-    : 1;
+    ? streak.currentStreak + 1 : 1;
 
   return {
     currentStreak: newStreak,
@@ -84,8 +71,6 @@ function updateStreakOnRecord(streak: StreakData): StreakData {
   };
 }
 
-// ─── App ─────────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
@@ -94,60 +79,56 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [loading, setLoading] = useState(true);
 
-  // ── Restore session on mount ──
   useEffect(() => {
     const session = getCurrentSession();
     if (session) {
       setAuthSession(session);
-      loadUserData(session.userId);
+      loadUserData(session.userId).then(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  const loadUserData = (userId: string) => {
+  const loadUserData = async (userId: string) => {
     try {
-      const savedProfile = localStorage.getItem(`prepflow_profile_${userId}`);
-      if (savedProfile) setProfile(JSON.parse(savedProfile));
-
-      const savedProgress = localStorage.getItem(`prepflow_progress_${userId}`);
-      if (savedProgress) setProgress(JSON.parse(savedProgress));
-
-      const savedStreak = localStorage.getItem(`prepflow_streak_${userId}`);
-      if (savedStreak) setStreak(JSON.parse(savedStreak));
+      const [p, prog, s] = await Promise.all([
+        loadStudentProfile(userId),
+        loadProgress(userId),
+        loadStreak(userId),
+      ]);
+      if (p) setProfile(p);
+      if (prog.length > 0) setProgress(prog);
+      if (s) setStreak(s);
     } catch (e) {
       console.error('Failed to load user data', e);
     }
   };
 
-  const saveProfile = (p: StudentProfile) => {
+  const saveProfile = async (p: StudentProfile) => {
     if (!authSession) return;
     setProfile(p);
-    localStorage.setItem(`prepflow_profile_${authSession.userId}`, JSON.stringify(p));
+    await saveStudentProfile(authSession.userId, p);
   };
 
-  const addProgress = (entry: ProgressEntry) => {
+  const addProgress = async (entry: ProgressEntry) => {
     if (!authSession) return;
-    const updated = [...progress, entry];
+    const updated = progress.filter(e =>
+      !(e.subjectCode === entry.subjectCode && e.component === entry.component &&
+        e.year === entry.year && e.session === entry.session)
+    );
+    updated.push(entry);
     setProgress(updated);
-    localStorage.setItem(`prepflow_progress_${authSession.userId}`, JSON.stringify(updated));
+    await saveAllProgress(authSession.userId, updated);
 
-    // Update streak & XP
     const newStreak = updateStreakOnRecord(streak);
     setStreak(newStreak);
-    localStorage.setItem(`prepflow_streak_${authSession.userId}`, JSON.stringify(newStreak));
+    await saveStreak(authSession.userId, newStreak);
   };
 
-  const deleteProgress = (id: string) => {
-    if (!authSession) return;
-    const updated = progress.filter(e => e.id !== id);
-    setProgress(updated);
-    localStorage.setItem(`prepflow_progress_${authSession.userId}`, JSON.stringify(updated));
-  };
-
-  const updateProgress = (entries: ProgressEntry[]) => {
+  const updateProgress = async (entries: ProgressEntry[]) => {
     if (!authSession) return;
     setProgress(entries);
-    localStorage.setItem(`prepflow_progress_${authSession.userId}`, JSON.stringify(entries));
+    await saveAllProgress(authSession.userId, entries);
   };
 
   const handleAuthSuccess = (session: AuthSession) => {
@@ -156,8 +137,8 @@ export default function App() {
     setCurrentPage('dashboard');
   };
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
     setAuthSession(null);
     setProfile(null);
     setProgress([]);
@@ -165,7 +146,6 @@ export default function App() {
     setCurrentPage('dashboard');
   };
 
-  // ── Loading spinner ──
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-void)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -177,7 +157,6 @@ export default function App() {
     );
   }
 
-  // ── Not authenticated ──
   if (!authSession) {
     return (
       <>
@@ -187,71 +166,39 @@ export default function App() {
     );
   }
 
-  // ── Render page content ──
+  const defaultProfile: StudentProfile = {
+    name: authSession.name,
+    level: 'IGCSE',
+    subjects: [],
+    targetGrade: 'A*',
+    yearsRange: { from: 2017, to: 2026 },
+  };
+
   const renderPage = () => {
+    const p = profile || defaultProfile;
     switch (currentPage) {
       case 'dashboard':
-        return (
-          <Dashboard
-            profile={profile || { name: authSession.username, level: 'IGCSE', subjects: [], targetGrade: 'A*', yearsRange: { from: 2020, to: 2024 } }}
-            progress={progress}
-            streak={streak}
-            onNavigate={(page) => setCurrentPage(page as Page)}
-          />
-        );
+        return <Dashboard profile={p} progress={progress} streak={streak} onNavigate={(page) => setCurrentPage(page as Page)} />;
       case 'record':
-        return (
-          <ProgressRecorder
-            profile={profile || { name: authSession.username, level: 'IGCSE', subjects: [], targetGrade: 'A*', yearsRange: { from: 2020, to: 2024 } }}
-            progress={progress}
-            onAddProgress={addProgress}
-            onUpdateProgress={updateProgress}
-          />
-        );
+        return <ProgressRecorder profile={p} progress={progress} onAddProgress={addProgress} onUpdateProgress={updateProgress} />;
       case 'pending':
-        return (
-          <PendingPapers
-            profile={profile || { name: authSession.username, level: 'IGCSE', subjects: [], targetGrade: 'A*', yearsRange: { from: 2020, to: 2024 } }}
-            progress={progress}
-            onUpdateProgress={updateProgress}
-          />
-        );
+        return <PendingPapers profile={p} progress={progress} onUpdateProgress={updateProgress} />;
       case 'achievements':
-        return (
-          <GamificationPage
-            progress={progress}
-            streak={streak}
-            username={authSession.username}
-            onNavigate={(page) => setCurrentPage(page as any)}
-          />
-        );
+        return <GamificationPage progress={progress} streak={streak} username={authSession.username} onNavigate={(page) => setCurrentPage(page as any)} />;
       case 'grades':
-        return (
-          <PredictedGrades
-            profile={profile || { name: authSession.username, level: 'IGCSE', subjects: [], targetGrade: 'A*', yearsRange: { from: 2020, to: 2024 } }}
-            progress={progress}
-            onNavigate={(page) => setCurrentPage(page as Page)}
-          />
-        );
+        return <PredictedGrades profile={p} progress={progress} onNavigate={(page) => setCurrentPage(page as Page)} />;
+      case 'hardest':
+        return <HardestPapers />;
       case 'settings':
-        return (
-          <SettingsPage
-            profile={profile}
-            onUpdateProfile={saveProfile}
-            username={authSession.username}
-          />
-        );
+        return <SettingsPage profile={profile} onUpdateProfile={saveProfile} username={authSession.username} />;
       default:
-        return <PlaceholderPage name="Dashboard" />;
+        return <Dashboard profile={p} progress={progress} streak={streak} onNavigate={(page) => setCurrentPage(page as Page)} />;
     }
   };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-void)' }}>
-      {/* Animated background */}
       <div className="app-bg"><div className="app-bg-grid" /></div>
-
-      {/* Sidebar */}
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
@@ -259,11 +206,7 @@ export default function App() {
         username={authSession.username}
         streak={streak.currentStreak}
       />
-
-      {/* Main content */}
-      <main className="main-content page-enter">
-        {renderPage()}
-      </main>
+      <main className="main-content page-enter">{renderPage()}</main>
     </div>
   );
 }
