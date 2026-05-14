@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import {
   LayoutDashboard, BookOpen, ClipboardList, TrendingUp,
-  Settings, LogOut, ChevronLeft, ChevronRight, Zap, Trophy
+  Settings, LogOut, ChevronLeft, ChevronRight, Zap, Trophy, Flame
 } from 'lucide-react';
 
-export type Page = 'dashboard' | 'record' | 'pending' | 'grades' | 'achievements' | 'settings';
+export type Page = 'dashboard' | 'record' | 'pending' | 'grades' | 'achievements' | 'hardest' | 'settings';
 
 interface SidebarProps {
   currentPage: Page;
@@ -15,12 +15,13 @@ interface SidebarProps {
 }
 
 const navItems: { id: Page; label: string; icon: React.ElementType; badge?: string }[] = [
-  { id: 'dashboard', label: 'Dashboard',       icon: LayoutDashboard },
-  { id: 'record',    label: 'Record Paper',     icon: BookOpen },
-  { id: 'pending',   label: 'Pending Papers',   icon: ClipboardList },
-  { id: 'grades',    label: 'Predicted Grades', icon: TrendingUp },
-  { id: 'achievements', label: 'Achievements',   icon: Trophy },
-  { id: 'settings',  label: 'Settings',         icon: Settings },
+  { id: 'dashboard',   label: 'Dashboard',       icon: LayoutDashboard },
+  { id: 'record',      label: 'Record Paper',     icon: BookOpen },
+  { id: 'pending',     label: 'Pending Papers',   icon: ClipboardList },
+  { id: 'hardest',     label: 'Hardest Papers',   icon: Flame, badge: 'NEW' },
+  { id: 'grades',      label: 'Predicted Grades', icon: TrendingUp },
+  { id: 'achievements',label: 'Achievements',     icon: Trophy },
+  { id: 'settings',    label: 'Settings',         icon: Settings },
 ];
 
 export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak = 0 }: SidebarProps) {
@@ -48,13 +49,26 @@ export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak
               <button
                 className={`sidebar-item ${isActive ? 'active' : ''}`}
                 onClick={() => onPageChange(item.id)}
+                style={{ position: 'relative' }}
               >
                 <Icon size={18} />
                 <span className="sidebar-item-label">{item.label}</span>
+                {item.badge && !collapsed && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 99,
+                    background: 'linear-gradient(135deg, #ef4444, #f97316)',
+                    color: '#fff',
+                    letterSpacing: '0.05em',
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
               </button>
-              {collapsed && (
-                <span className="tooltip-text">{item.label}</span>
-              )}
+              {collapsed && <span className="tooltip-text">{item.label}</span>}
             </div>
           );
         })}
@@ -62,7 +76,6 @@ export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak
 
       {/* Footer */}
       <div className="sidebar-footer">
-        {/* Streak */}
         {streak > 0 && (
           <div className="tooltip" style={{ marginBottom: 8 }}>
             <div style={{
@@ -82,16 +95,12 @@ export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak
         )}
 
         {/* User row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 4px', marginBottom: 8
-        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', marginBottom: 8 }}>
           <div style={{
             width: 32, height: 32, borderRadius: '50%',
             background: 'linear-gradient(135deg, var(--accent-violet), var(--accent-cyan))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 700, color: '#fff',
-            flexShrink: 0
+            fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0
           }}>
             {initials}
           </div>
