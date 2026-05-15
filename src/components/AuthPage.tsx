@@ -8,6 +8,7 @@ import { subjectsDatabase } from '../data/subjects';
 
 interface AuthPageProps {
   onAuthSuccess: (session: AuthSession) => void;
+  onBack?: () => void;
 }
 
 // ─── Particle background ──────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ function SignUpFlow({ onSuccess, onBack }: { onSuccess: (s: AuthSession) => void
 }
 
 // ─── MAIN AUTH PAGE ───────────────────────────────────────────────────────────
-export function AuthPage({ onAuthSuccess }: AuthPageProps) {
+export function AuthPage({ onAuthSuccess, onBack }: AuthPageProps) {
   const [mode, setMode]         = useState<'signin'|'signup'>('signin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -314,6 +315,11 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         {/* Sign in form */}
         <div style={{ flex:'0 0 390px', width:'100%' }}>
           <div className="glass-bright gradient-border animate-scale-in" style={{ padding:30, boxShadow:'0 24px 80px rgba(0,0,0,0.5)' }}>
+            {onBack && (
+              <button onClick={onBack} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', fontSize:12, marginBottom:16, padding:0 }}>
+                ← Back to home
+              </button>
+            )}
             <h2 style={{ fontFamily:'var(--font-display)', fontSize:'1.2rem', fontWeight:700, color:'var(--text-primary)', marginBottom:4 }}>Welcome back</h2>
             <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:22 }}>Sign in to continue your prep journey</p>
 
