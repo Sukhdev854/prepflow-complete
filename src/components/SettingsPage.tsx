@@ -11,6 +11,7 @@ interface Props {
   profile: StudentProfile | null;
   onUpdateProfile: (profile: StudentProfile) => void;
   username: string;
+  onPrefsChange?: () => void;
 }
 
 // No AS Level
@@ -22,10 +23,10 @@ const YEARS = Array.from({ length: 2026 - 2017 + 1 }, (_, i) => 2017 + i);
 // ─── Customization options ────────────────────────────────────────────────────
 const THEMES = [
   { id:'violet',  label:'Violet',  color:'#7c3aed' },
-  { id:'cyan',    label:'Cyan',    color:'#0e7490' },
-  { id:'emerald', label:'Emerald', color:'#065f46' },
-  { id:'rose',    label:'Rose',    color:'#9f1239' },
-  { id:'amber',   label:'Amber',   color:'#92400e' },
+  { id:'cyan',    label:'Cyan',    color:'#0891b2' },
+  { id:'emerald', label:'Emerald', color:'#059669' },
+  { id:'rose',    label:'Rose',    color:'#e11d48' },
+  { id:'amber',   label:'Amber',   color:'#d97706' },
 ];
 const FONTS = [
   { id:'default', label:'Default (Syne)' },
@@ -41,21 +42,37 @@ const DEFAULT_VIEWS = [
 interface Prefs { theme: string; font: string; defaultView: string; compact: boolean; }
 
 function loadPrefs(): Prefs {
-  try { return JSON.parse(localStorage.getItem('prepflow_prefs') || '{}'); } catch { return {}; }
+  try { return { theme:'violet', font:'default', defaultView:'list', compact:false, ...JSON.parse(localStorage.getItem('prepflow_prefs') || '{}') }; }
+  catch { return { theme:'violet', font:'default', defaultView:'list', compact:false }; }
 }
+
+// Apply theme by setting CSS variables directly on :root
+function applyPrefs(prefs: Prefs) {
+  const THEME_VARS: Record<string, [string, string, string]> = {
+    violet:  ['#7c3aed', '#a855f7', 'rgba(124,58,237,0.35)'],
+    cyan:    ['#0891b2', '#22d3ee', 'rgba(6,182,212,0.35)'],
+    emerald: ['#059669', '#34d399', 'rgba(16,185,129,0.35)'],
+    rose:    ['#e11d48', '#fb7185', 'rgba(244,63,94,0.35)'],
+    amber:   ['#d97706', '#fbbf24', 'rgba(245,158,11,0.35)'],
+  };
+  const root = document.documentElement;
+  const [v, vb, glow] = THEME_VARS[prefs.theme] || THEME_VARS.violet;
+  root.style.setProperty('--accent-violet',        v);
+  root.style.setProperty('--accent-violet-bright', vb);
+  root.style.setProperty('--glow-violet',          glow);
+
+  const body = document.body;
+  body.classList.remove('font-inter', 'font-mono', 'font-rounded');
+  if (prefs.font && prefs.font !== 'default') body.classList.add(`font-${prefs.font}`);
+
+  if (prefs.compact) body.classList.add('compact-mode');
+  else body.classList.remove('compact-mode');
+}
+
 function savePrefs(prefs: Prefs) {
   localStorage.setItem('prepflow_prefs', JSON.stringify(prefs));
   applyPrefs(prefs);
 }
-function applyPrefs(prefs: Prefs) {
-  const root = document.documentElement;
-  root.setAttribute('data-theme',   prefs.theme   || 'violet');
-  root.setAttribute('data-font',    prefs.font     || 'default');
-  root.setAttribute('data-compact', prefs.compact ? 'true' : 'false');
-}
-
-// Apply on load
-if (typeof document !== 'undefined') applyPrefs(loadPrefs());
 
 // ─── Subject Picker (inline, not popup) ──────────────────────────────────────
 function SubjectPickerPanel({
@@ -165,7 +182,7 @@ function SubjectPickerPanel({
 }
 
 // ─── MAIN SETTINGS PAGE ───────────────────────────────────────────────────────
-export function SettingsPage({ profile, onUpdateProfile, username }: Props) {
+export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange }: Props) {
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
   const [saved, setSaved]                         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -207,14 +224,17 @@ export function SettingsPage({ profile, onUpdateProfile, username }: Props) {
   const handleThemeChange = (t: string) => {
     setTheme(t);
     applyPrefs({ theme: t, font, defaultView, compact });
+    onPrefsChange?.();
   };
   const handleFontChange = (f: string) => {
     setFont(f);
     applyPrefs({ theme, font: f, defaultView, compact });
+    onPrefsChange?.();
   };
   const handleCompactChange = (c: boolean) => {
     setCompact(c);
     applyPrefs({ theme, font, defaultView, compact: c });
+    onPrefsChange?.();
   };
 
   const removeSubject = (code: string) => {
