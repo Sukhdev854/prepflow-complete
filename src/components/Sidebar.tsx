@@ -12,6 +12,7 @@ interface SidebarProps {
   onSignOut: () => void;
   username: string;
   streak?: number;
+  onHome?: () => void;
 }
 
 const navItems: { id: Page; label: string; icon: React.ElementType; badge?: string }[] = [
@@ -24,15 +25,19 @@ const navItems: { id: Page; label: string; icon: React.ElementType; badge?: stri
   { id: 'settings',    label: 'Settings',         icon: Settings },
 ];
 
-export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak = 0 }: SidebarProps) {
+export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak = 0, onHome }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-
   const initials = username.slice(0, 2).toUpperCase();
 
   return (
     <nav className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-      {/* Logo */}
-      <div className="sidebar-logo">
+      {/* Logo — click goes to dashboard/home */}
+      <div
+        className="sidebar-logo"
+        onClick={() => { if (onHome) onHome(); else onPageChange('dashboard'); }}
+        style={{ cursor: 'pointer' }}
+        title="Go to Dashboard"
+      >
         <div className="sidebar-logo-icon animate-glow">
           <Zap size={18} color="#fff" />
         </div>
