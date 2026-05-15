@@ -55,20 +55,23 @@ function gradeColor(g: string) {
 
 function getPaperLink(code: string, year: number, session: string, component: string, type: 'qp' | 'ms') {
   const yy = String(year).slice(-2);
-  // Use bestexamhelp.com as the primary source
   const levelPath = parseInt(code) >= 9000 ? 'cambridge-international-a-level' : 'cambridge-igcse';
   const subjectSlugs: Record<string, string> = {
-    '9706': 'accounting-9706', '9609': 'business-9609', '9708': 'economics-9708',
-    '9709': 'mathematics-9709', '9702': 'physics-9702', '9701': 'chemistry-9701',
-    '9700': 'biology-9700', '9389': 'history-9389', '9093': 'english-language-9093',
-    '9084': 'law-9084', '9231': 'further-mathematics-9231',
-    '0455': 'economics-0455', '0450': 'business-studies-0450',
-    '0580': 'mathematics-0580', '0610': 'biology-0610', '0620': 'chemistry-0620',
-    '0625': 'physics-0625', '0500': 'english-first-language-0500',
-    '0522': 'english-language-0522', '0606': 'additional-mathematics-0606',
+    '9706':'accounting-9706','9609':'business-9609','9708':'economics-9708',
+    '9709':'mathematics-9709','9702':'physics-9702','9701':'chemistry-9701',
+    '9700':'biology-9700','9389':'history-9389','9093':'english-language-9093',
+    '0455':'economics-0455','0450':'business-studies-0450','0580':'mathematics-0580',
+    '0610':'biology-0610','0620':'chemistry-0620','0625':'physics-0625',
+    '0500':'english-first-language-0500','0606':'additional-mathematics-0606',
   };
   const slug = subjectSlugs[code] || `subject-${code}`;
   return `https://bestexamhelp.com/exam/${levelPath}/${slug}/${year}/${code}_${session}${yy}_${type}_${component}.pdf`;
+}
+
+// Feb/March: only variant-2 components (ending in 2: 12, 22, 32, 42...)
+function filterComponentsForSession(components: string[], session: string): string[] {
+  if (session === 'm') return components.filter(c => c.endsWith('2'));
+  return components;
 }
 
 // ─── Paper Card ───────────────────────────────────────────────────────────────
@@ -302,6 +305,8 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
       subject.components.forEach(componentCode => {
         years.forEach(year => {
           ['m', 's', 'w'].forEach(session => {
+            // Feb/March: skip components not ending in 2
+            if (filterComponentsForSession([componentCode], session).length === 0) return;
             const entry = progress.find(p =>
               p.subjectCode === subject.code &&
               p.component === componentCode &&
