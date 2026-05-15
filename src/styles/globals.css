@@ -339,20 +339,27 @@ select.input-field option { background: var(--bg-elevated); color: var(--text-pr
   height: 1px; background: var(--border-dim); margin: 8px 0;
 }
 
-/* ─── Grid view cards — fix overflow clip on hover ─── */
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .sidebar { width: 72px; }
+  .sidebar .sidebar-item-label,
+  .sidebar .sidebar-logo-text { opacity:0; max-width:0; pointer-events:none; }
+  .main-content { margin-left: 72px; }
+}
+
+/* ─── Grid cards — overflow visible so hover shadow isn't clipped ─── */
 .grid-card {
   background: var(--bg-card);
   border: 1px solid var(--border-dim);
   border-radius: 14px;
-  overflow: visible !important;
+  overflow: visible;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-  cursor: default;
   position: relative;
 }
 .grid-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.3);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.25);
   z-index: 2;
 }
 .grid-card-inner {
@@ -361,37 +368,46 @@ select.input-field option { background: var(--bg-elevated); color: var(--text-pr
   height: 100%;
 }
 
-/* ─── Theme accent variants ─── */
-[data-theme="violet"] {
-  --accent-violet: #7c3aed; --accent-violet-bright: #a78bfa; --glow-violet: rgba(124,58,237,0.35);
-}
-[data-theme="cyan"] {
-  --accent-violet: #0e7490; --accent-violet-bright: #22d3ee; --glow-violet: rgba(6,182,212,0.35);
-}
-[data-theme="emerald"] {
-  --accent-violet: #065f46; --accent-violet-bright: #34d399; --glow-violet: rgba(16,185,129,0.35);
-}
-[data-theme="rose"] {
-  --accent-violet: #9f1239; --accent-violet-bright: #fb7185; --glow-violet: rgba(244,63,94,0.35);
-}
-[data-theme="amber"] {
-  --accent-violet: #92400e; --accent-violet-bright: #fbbf24; --glow-violet: rgba(245,158,11,0.35);
+/* ─── Log paper full page ─── */
+.log-paper-page {
+  padding: 32px 28px;
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
-/* ─── Font variants ─── */
-[data-font="inter"]   { font-family: 'Inter', sans-serif; }
-[data-font="mono"]    { font-family: 'JetBrains Mono', monospace; }
-[data-font="rounded"] { font-family: 'Nunito', sans-serif; }
+/* ─── Font classes (applied to <body> by JS) ─── */
+.font-inter   { font-family: 'Inter', 'DM Sans', sans-serif !important; }
+.font-mono    { font-family: 'JetBrains Mono', 'Courier New', monospace !important; }
+.font-rounded { font-family: 'Nunito', 'DM Sans', sans-serif !important; }
 
 /* ─── Compact mode ─── */
-[data-compact="true"] * { font-size: 13px; }
-[data-compact="true"] h1 { font-size: 1.4rem !important; }
-[data-compact="true"] h2 { font-size: 1rem !important; }
+.compact-mode { font-size: 13px; }
+.compact-mode h1 { font-size: 1.4rem !important; }
+.compact-mode h2 { font-size: 1.1rem !important; }
 
-/* ─── Responsive ─── */
-@media (max-width: 768px) {
-  .sidebar { width: 72px; }
-  .sidebar .sidebar-item-label,
-  .sidebar .sidebar-logo-text { opacity:0; max-width:0; pointer-events:none; }
-  .main-content { margin-left: 72px; }
+/* ─── Landing page ─── */
+.landing-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
+.landing-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(124,58,237,0.35);
+  box-shadow: 0 8px 32px rgba(124,58,237,0.12);
+}
+.landing-stat {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #f1f0ff, var(--accent-violet-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+@keyframes slide-up { from{opacity:0;transform:translateY(40px);} to{opacity:1;transform:translateY(0);} }
+@keyframes counter { from{opacity:0;} to{opacity:1;} }
