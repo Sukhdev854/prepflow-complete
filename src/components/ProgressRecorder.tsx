@@ -432,8 +432,7 @@ function SubjectGridTable({ subject, progress, onSave, onClear, yearRange }: {
           <thead>
             {/* Year header row */}
             <tr style={{ background:'rgba(255,255,255,0.03)',borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-              <th style={{ position:'sticky',left:0,zIndex:3,background:'#13131f',width:130,minWidth:130,padding:'10px 14px',textAlign:'left',borderRight:'2px solid rgba(255,255,255,0.08)',fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em' }}>Subject</th>
-              <th style={{ position:'sticky',left:130,zIndex:3,background:'#13131f',width:68,minWidth:68,padding:'10px 8px',textAlign:'center',borderRight:'2px solid rgba(255,255,255,0.08)',fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em' }}>Paper</th>
+              <th style={{ position:'sticky',left:0,zIndex:3,background:'#13131f',width:72,minWidth:72,padding:'10px 12px',textAlign:'center',borderRight:'2px solid rgba(255,255,255,0.08)',fontSize:10,fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.06em' }}>Paper</th>
               {/* Year group headers */}
               {Array.from(new Set(columns.map(c=>c.year))).map(yr => (
                 <th key={yr} colSpan={3} style={{ padding:'8px 4px',textAlign:'center',borderLeft:'1px solid rgba(255,255,255,0.08)',fontSize:12,fontWeight:700,color:'var(--text-secondary)',letterSpacing:'0.02em',minWidth:180 }}>
@@ -443,8 +442,7 @@ function SubjectGridTable({ subject, progress, onSave, onClear, yearRange }: {
             </tr>
             {/* Session sub-header */}
             <tr style={{ background:'rgba(255,255,255,0.015)',borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-              <th style={{ position:'sticky',left:0,zIndex:3,background:'#13131f',borderRight:'2px solid rgba(255,255,255,0.08)' }}/>
-              <th style={{ position:'sticky',left:130,zIndex:3,background:'#13131f',borderRight:'2px solid rgba(255,255,255,0.08)' }}/>
+              <th style={{ position:'sticky',left:0,zIndex:3,background:'#13131f',width:72,minWidth:72,borderRight:'2px solid rgba(255,255,255,0.08)' }}/>
               {columns.map((col,i) => (
                 <th key={i} style={{ padding:'5px 3px',textAlign:'center',width:62,minWidth:62,fontSize:9,fontWeight:600,color: col.session==='m'?'rgba(245,158,11,0.6)':col.session==='s'?'rgba(6,182,212,0.6)':'rgba(168,85,247,0.6)',textTransform:'uppercase',letterSpacing:'0.04em',borderLeft:col.session==='m'?'1px solid rgba(255,255,255,0.06)':undefined,borderRight:'1px solid rgba(255,255,255,0.03)' }}>
                   {SESSION_LABELS[col.session]}
@@ -459,17 +457,8 @@ function SubjectGridTable({ subject, progress, onSave, onClear, yearRange }: {
                 <tr key={comp.code} style={{ borderBottom:rowIdx<rows.length-1?'1px solid rgba(255,255,255,0.04)':'none',transition:'background 0.1s' }}
                   onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.012)')}
                   onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
-                  {/* Subject column — only first row */}
-                  <td style={{ position:'sticky',left:0,zIndex:2,background:'#13131f',padding:'8px 14px',borderRight:'2px solid rgba(255,255,255,0.08)',verticalAlign:'middle',width:130,minWidth:130 }}>
-                    {rowIdx===0 && (
-                      <div>
-                        <div style={{ fontSize:12,fontWeight:700,color:'var(--text-primary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{subject.name}</div>
-                        <div style={{ fontSize:9,color:'var(--text-muted)',marginTop:1 }}>{subject.code}</div>
-                      </div>
-                    )}
-                  </td>
-                  {/* Component column */}
-                  <td style={{ position:'sticky',left:130,zIndex:2,background:'#13131f',padding:'6px 8px',borderRight:'2px solid rgba(255,255,255,0.08)',textAlign:'center',verticalAlign:'middle',width:68,minWidth:68 }}>
+                  {/* Component column — only sticky column now */}
+                  <td style={{ position:'sticky',left:0,zIndex:2,background:'#13131f',padding:'6px 8px',borderRight:'2px solid rgba(255,255,255,0.08)',textAlign:'center',verticalAlign:'middle',width:72,minWidth:72 }}>
                     <div style={{ fontSize:14,fontWeight:700,color:isGreyed?'rgba(255,255,255,0.18)':'var(--text-primary)',lineHeight:1 }}>{comp.code}</div>
                     <div style={{ fontSize:9,color:'var(--text-dim)',marginTop:2 }}>/{comp.maxMarks}</div>
                     {isGreyed && <div style={{ fontSize:8,color:'rgba(245,158,11,0.5)',marginTop:1 }}>unavail</div>}
