@@ -572,8 +572,8 @@ export function ProgressRecorder({ profile, progress, onAddProgress, onUpdatePro
         </div>
       </div>
 
-      {/* Subject chips */}
-      {bySubject.length>0&&(
+      {/* Subject chips — list view only */}
+      {viewMode==='list' && bySubject.length>0&&(
         <div className="animate-fade-up stagger-1" style={{ display:'flex',gap:10,flexWrap:'wrap' }}>
           {bySubject.map((s,i)=>(
             <div key={s.code} style={{ padding:'10px 16px',borderRadius:12,cursor:'pointer',background:filterSubject===s.code?`${s.color}18`:'rgba(255,255,255,0.03)',border:`1px solid ${filterSubject===s.code?s.color+'50':'var(--border-dim)'}`,transition:'all 0.2s',animation:`fade-up 0.4s ${0.04*i}s both` }}
@@ -606,7 +606,9 @@ export function ProgressRecorder({ profile, progress, onAddProgress, onUpdatePro
               </div>
               {profile.subjects.map(subj=>(
                 <SubjectGridTable key={subj.code} subject={subj} progress={progress}
-                  onSave={handleGridSave} onClear={handleGridClear} yearRange={yearRange}/>
+                  onSave={handleGridSave} onClear={handleGridClear}
+                  yearRange={{ from: subj.yearsRange?.from || yearRange.from, to: subj.yearsRange?.to || yearRange.to }}
+                />
               ))}
             </>
           )}
