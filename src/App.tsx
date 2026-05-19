@@ -237,7 +237,7 @@ export default function App() {
       case 'achievements': return <GamificationPage progress={progress} streak={streak} username={authSession.username} onNavigate={pg => setCurrentPage(pg as any)} />;
       case 'grades':       return <PredictedGrades profile={p} progress={progress} onNavigate={pg => setCurrentPage(pg as Page)} />;
       case 'hardest':      return <HardestPapers />;
-      case 'settings':     return <SettingsPage profile={profile} onUpdateProfile={saveProfile} username={authSession.username} onPrefsChange={applyStoredPrefs} />;
+      case 'settings':     return <SettingsPage profile={profile} onUpdateProfile={saveProfile} username={authSession.username} onPrefsChange={applyStoredPrefs} progress={progress} onUpdateProgress={updateProgress} />;
       default:             return <Dashboard profile={p} progress={progress} streak={streak} onNavigate={pg => setCurrentPage(pg as Page)} />;
     }
   };
