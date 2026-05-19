@@ -27,6 +27,14 @@ const navItems: { id: Page; label: string; icon: React.ElementType; badge?: stri
 
 export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak = 0, onHome }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    // Tell main-content to expand/shrink its left margin
+    const main = document.querySelector('.main-content');
+    if (main) main.classList.toggle('sidebar-collapsed', next);
+  };
   const initials = username.slice(0, 2).toUpperCase();
 
   return (
@@ -128,7 +136,7 @@ export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak
         {/* Collapse toggle */}
         <button
           className="btn-ghost"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => toggleCollapsed()}
           style={{ width: '100%', marginTop: 8, justifyContent: collapsed ? 'center' : 'flex-start', padding: '8px 12px' }}
         >
           {collapsed
