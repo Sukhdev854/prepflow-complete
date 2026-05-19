@@ -288,8 +288,9 @@ function KanbanColumn({
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
-  const [filterSubject, setFilterSubject] = useState('all');
-  const [search, setSearch] = useState('');
+  const [filterSubject,   setFilterSubject]   = useState('all');
+  const [filterComponent, setFilterComponent] = useState('all');
+  const [search,          setSearch]          = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
 
   // Build the full paper matrix from profile
@@ -333,6 +334,8 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
     const cols: Record<KanbanCol, Paper[]> = { todo: [], 'in-progress': [], 'to-mark': [], done: [] };
     allPapers
       .filter(p => {
+        if (filterSubject !== 'all' && p.subjectCode !== filterSubject) return false;
+        if (filterComponent !== 'all' && p.component !== filterComponent) return false;
         if (search) {
           const q = search.toLowerCase();
           return p.subjectName.toLowerCase().includes(q) || p.component.includes(q) || String(p.year).includes(q);
@@ -352,7 +355,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
         }
       });
     return cols;
-  }, [allPapers, search]);
+  }, [allPapers, search, filterSubject, filterComponent]);
 
   // Stats
   const total = allPapers.length;
@@ -456,6 +459,19 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search papers..." className="input-field" style={{ paddingLeft: 34, padding: '9px 12px 9px 34px', fontSize: 13 }} />
         </div>
 
+        {/* Component filter dropdown */}
+        <select value={filterComponent} onChange={e => setFilterComponent(e.target.value)}
+          className="input-field" style={{ flex: '0 0 auto', width: 'auto', padding: '9px 12px', fontSize: 13 }}>
+          <option value="all">All Papers</option>
+          {Array.from(new Set(
+            profile.subjects
+              .filter(s => filterSubject === 'all' || s.code === filterSubject)
+              .flatMap(s => s.components)
+          )).sort().map(comp => (
+            <option key={comp} value={comp}>Paper {comp}</option>
+          ))}
+        </select>
+
         {/* All pill */}
         <button onClick={() => setFilterSubject('all')}
           style={{
@@ -472,7 +488,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
           const color = getSubjectColor(s.code).hex;
           const active = filterSubject === s.code;
           return (
-            <button key={s.code} onClick={() => setFilterSubject(active ? 'all' : s.code)}
+            <button key={s.code} onClick={() => { setFilterSubject(active ? 'all' : s.code); setFilterComponent('all'); }}
               style={{
                 padding: '8px 16px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
                 background: active ? `${color}22` : 'rgba(255,255,255,0.04)',
@@ -487,9 +503,9 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
           );
         })}
 
-        {(filterSubject !== 'all' || search) && (
+        {(filterSubject !== 'all' || filterComponent !== 'all' || search) && (
           <button className="btn-ghost" style={{ padding: '8px 12px', fontSize: 12 }}
-            onClick={() => { setFilterSubject('all'); setSearch(''); }}>
+            onClick={() => { setFilterSubject('all'); setFilterComponent('all'); setSearch(''); }}>
             <X size={13} /> Clear
           </button>
         )}
@@ -531,6 +547,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
           {allPapers
             .filter(p => {
               if (filterSubject !== 'all' && p.subjectCode !== filterSubject) return false;
+              if (filterComponent !== 'all' && p.component !== filterComponent) return false;
               if (search) { const q = search.toLowerCase(); return p.subjectName.toLowerCase().includes(q) || p.component.includes(q) || String(p.year).includes(q); }
               return true;
             })
