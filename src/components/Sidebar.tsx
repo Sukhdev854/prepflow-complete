@@ -31,9 +31,7 @@ export function Sidebar({ currentPage, onPageChange, onSignOut, username, streak
   const toggleCollapsed = () => {
     const next = !collapsed;
     setCollapsed(next);
-    // Tell main-content to expand/shrink its left margin
-    const main = document.querySelector('.main-content');
-    if (main) main.classList.toggle('sidebar-collapsed', next);
+    document.documentElement.style.setProperty('--sidebar-w', next ? '72px' : '240px');
   };
   const initials = username.slice(0, 2).toUpperCase();
 
