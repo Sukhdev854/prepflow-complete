@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { StudentProfile, SelectedSubject } from '../App';
+import { useState, useEffect, useRef } from 'react';
+import { StudentProfile, SelectedSubject, ProgressEntry } from '../App';
 import { getSubjectsByLevel, getSubjectByCode, SubjectData } from '../data/subjects';
 import {
   User, BookOpen, Target, Save, Plus, X, Check,
   ChevronRight, ChevronLeft, GraduationCap, Search,
-  Trash2, Palette, Type, Layout, Monitor
+  Trash2, Palette, Download, Upload
 } from 'lucide-react';
 
 interface Props {
@@ -12,6 +12,8 @@ interface Props {
   onUpdateProfile: (profile: StudentProfile) => void;
   username: string;
   onPrefsChange?: () => void;
+  progress?: ProgressEntry[];
+  onUpdateProgress?: (entries: ProgressEntry[]) => void;
 }
 
 // No AS Level
@@ -182,7 +184,7 @@ function SubjectPickerPanel({
 }
 
 // ─── MAIN SETTINGS PAGE ───────────────────────────────────────────────────────
-export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange }: Props) {
+export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange, progress = [], onUpdateProgress }: Props) {
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
   const [saved, setSaved]                         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -201,6 +203,104 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
   const [font,        setFont]        = useState(stored.font         || 'default');
   const [defaultView, setDefaultView] = useState(stored.defaultView || 'list');
   const [compact,     setCompact]     = useState(stored.compact      || false);
+
+  // ── Export / Import ──
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState('');
+
+  const handleExport = () => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      profile: profile || null,
+      progress,
+    };
+    // Build CSV-style Excel-compatible export
+    const rows: string[][] = [
+      ['PrepFlow Export', new Date().toLocaleDateString('en-GB')],
+      [],
+      ['Subject', 'Code', 'Component', 'Year', 'Session', 'Score', 'Max Marks', 'Percentage', 'Grade', 'Status', 'Date Logged'],
+    ];
+    const gradeFromPct = (pct: number) => {
+      if (pct >= 90) return 'A*'; if (pct >= 80) return 'A'; if (pct >= 70) return 'B';
+      if (pct >= 60) return 'C';  if (pct >= 50) return 'D'; if (pct >= 40) return 'E'; return 'U';
+    };
+    const SESSION_LABELS: Record<string,string> = { m:'Feb/Mar', s:'May/Jun', w:'Oct/Nov' };
+    progress.forEach(e => {
+      const subj = profile?.subjects.find(s => s.code === e.subjectCode);
+      const pct  = e.maxScore > 0 ? (e.score / e.maxScore) * 100 : 0;
+      rows.push([
+        subj?.name || e.subjectCode,
+        e.subjectCode,
+        `Paper ${e.component}`,
+        String(e.year),
+        SESSION_LABELS[e.session] || e.session,
+        String(e.score),
+        String(e.maxScore),
+        `${pct.toFixed(1)}%`,
+        gradeFromPct(pct),
+        e.status || 'done',
+        new Date(e.date).toLocaleDateString('en-GB'),
+      ]);
+    });
+    // Convert to CSV (opens in Excel)
+    const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `prepflow-export-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const lines = text.split('\n').filter(Boolean);
+        // Skip header rows (first 3 rows)
+        const dataLines = lines.slice(3);
+        const SESSION_MAP: Record<string,string> = { 'Feb/Mar':'m', 'May/Jun':'s', 'Oct/Nov':'w' };
+        const imported: ProgressEntry[] = [];
+        dataLines.forEach(line => {
+          const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+          if (cols.length < 8 || !cols[1]) return;
+          const score    = parseFloat(cols[5]);
+          const maxScore = parseFloat(cols[6]);
+          const year     = parseInt(cols[3]);
+          const session  = SESSION_MAP[cols[4]] || cols[4];
+          const compRaw  = cols[2].replace('Paper ', '').trim();
+          if (isNaN(score) || isNaN(maxScore) || isNaN(year) || !session || !compRaw) return;
+          imported.push({
+            id:          `import_${cols[1]}_${compRaw}_${year}_${session}_${Date.now()}_${Math.random()}`,
+            subjectCode: cols[1],
+            component:   compRaw,
+            year, session, score, maxScore,
+            date:        new Date().toISOString(),
+            status:      (cols[9] as any) || 'done',
+          });
+        });
+        if (imported.length === 0) { setImportMsg('No valid rows found in file. Make sure it\'s a PrepFlow export.'); return; }
+        // Merge with existing (imported wins on duplicate key)
+        const merged = [...(progress || [])];
+        imported.forEach(imp => {
+          const idx = merged.findIndex(e => e.subjectCode===imp.subjectCode && e.component===imp.component && e.year===imp.year && e.session===imp.session);
+          if (idx >= 0) merged[idx] = imp; else merged.push(imp);
+        });
+        onUpdateProgress?.(merged);
+        setImportMsg(`✓ Imported ${imported.length} paper${imported.length !== 1 ? 's' : ''} successfully!`);
+        setTimeout(() => setImportMsg(''), 4000);
+      } catch (err) {
+        setImportMsg('Failed to parse file. Make sure it\'s a PrepFlow CSV export.');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be re-imported
+    e.target.value = '';
+  };
 
   useEffect(() => {
     if (profile) {
@@ -436,8 +536,49 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
         </div>
       </div>
 
-      {/* Save button (bottom) */}
-      <div className="animate-fade-up stagger-5">
+      {/* ── Export / Import ── */}
+      <div className="glass glow-card animate-fade-up stagger-5" style={{ padding:24, borderRadius:'var(--radius-lg)' }}>
+        {SECTION(<Download size={16} color="#06b6d4"/>, 'Export & Import', 'Back up your data or move it between devices')}
+
+        <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+          {/* Export */}
+          <div style={{ flex:'1 1 220px', padding:'16px 18px', borderRadius:12, background:'rgba(6,182,212,0.06)', border:'1px solid rgba(6,182,212,0.2)' }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)', marginBottom:6 }}>📤 Export to Excel / CSV</div>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:14, lineHeight:1.6 }}>
+              Downloads all your logged papers as a .csv file — opens in Excel, Google Sheets, or any spreadsheet app.
+            </div>
+            <button onClick={handleExport} disabled={progress.length === 0}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', borderRadius:9, cursor:progress.length===0?'not-allowed':'pointer', border:'none', background:'rgba(6,182,212,0.15)', color:'var(--accent-cyan)', fontWeight:600, fontSize:13, opacity:progress.length===0?0.5:1, transition:'all 0.15s' }}
+              onMouseEnter={e=>{ if(progress.length>0)(e.currentTarget as HTMLButtonElement).style.background='rgba(6,182,212,0.25)'; }}
+              onMouseLeave={e=>{ (e.currentTarget as HTMLButtonElement).style.background='rgba(6,182,212,0.15)'; }}>
+              <Download size={14}/> Export {progress.length > 0 ? `(${progress.length} papers)` : '(no data)'}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div style={{ flex:'1 1 220px', padding:'16px 18px', borderRadius:12, background:'rgba(168,85,247,0.06)', border:'1px solid rgba(168,85,247,0.2)' }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)', marginBottom:6 }}>📥 Import from CSV</div>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:14, lineHeight:1.6 }}>
+              Import a previously exported PrepFlow CSV. Duplicates are overwritten with the imported score.
+            </div>
+            <input ref={importRef} type="file" accept=".csv" onChange={handleImport} style={{ display:'none' }}/>
+            <button onClick={()=>importRef.current?.click()}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', borderRadius:9, cursor:'pointer', border:'none', background:'rgba(168,85,247,0.15)', color:'var(--accent-violet-bright)', fontWeight:600, fontSize:13, transition:'all 0.15s' }}
+              onMouseEnter={e=>{ (e.currentTarget as HTMLButtonElement).style.background='rgba(168,85,247,0.25)'; }}
+              onMouseLeave={e=>{ (e.currentTarget as HTMLButtonElement).style.background='rgba(168,85,247,0.15)'; }}>
+              <Upload size={14}/> Choose CSV File
+            </button>
+            {importMsg && (
+              <div style={{ marginTop:10, fontSize:12, fontWeight:600, color: importMsg.startsWith('✓') ? 'var(--accent-emerald)' : 'var(--accent-red)', padding:'8px 12px', borderRadius:8, background: importMsg.startsWith('✓') ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)' }}>
+                {importMsg}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Save button */}
+      <div className="animate-fade-up stagger-6">
         <button className="btn-primary" onClick={handleSave} style={{ width:'100%', padding:'13px 0', fontSize:15 }}>
           {saved ? <><Check size={16}/> <span>Changes Saved!</span></> : <><Save size={16}/> <span>Save All Changes</span></>}
         </button>
