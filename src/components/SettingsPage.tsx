@@ -261,19 +261,50 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
       try {
         const text = ev.target?.result as string;
         const lines = text.split('\n').filter(Boolean);
+
+        // ── Validate this is a PrepFlow export ──
+        const firstLine = lines[0] || '';
+        if (!firstLine.includes('PrepFlow Export')) {
+          setImportMsg('❌ This doesn\'t look like a PrepFlow export. Please only import files that were exported from PrepFlow Settings.');
+          return;
+        }
+
+        // Check the header row (line 3) has the right columns
+        const headerLine = lines[2] || '';
+        const expectedCols = ['Subject', 'Code', 'Component', 'Year', 'Session', 'Score', 'Max Marks'];
+        const missingCols = expectedCols.filter(col => !headerLine.includes(col));
+        if (missingCols.length > 0) {
+          setImportMsg('❌ File format not recognised. Make sure you\'re using a file exported from PrepFlow — not a custom spreadsheet.');
+          return;
+        }
         // Skip header rows (first 3 rows)
         const dataLines = lines.slice(3);
         const SESSION_MAP: Record<string,string> = { 'Feb/Mar':'m', 'May/Jun':'s', 'Oct/Nov':'w' };
         const imported: ProgressEntry[] = [];
+        let skipped = 0;
         dataLines.forEach(line => {
           const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
           if (cols.length < 8 || !cols[1]) return;
+
           const score    = parseFloat(cols[5]);
           const maxScore = parseFloat(cols[6]);
           const year     = parseInt(cols[3]);
           const session  = SESSION_MAP[cols[4]] || cols[4];
           const compRaw  = cols[2].replace('Paper ', '').trim();
-          if (isNaN(score) || isNaN(maxScore) || isNaN(year) || !session || !compRaw) return;
+
+          // Validate each field — reject rows that don't look right
+          const validCode    = /^\d{4}$/.test(cols[1]);          // 4-digit subject code
+          const validComp    = /^\d{2}$/.test(compRaw);          // 2-digit component
+          const validYear    = year >= 2000 && year <= 2030;
+          const validSession = ['m','s','w'].includes(session);
+          const validScore   = !isNaN(score) && score >= 0;
+          const validMax     = !isNaN(maxScore) && maxScore > 0;
+
+          if (!validCode || !validComp || !validYear || !validSession || !validScore || !validMax) {
+            skipped++;
+            return;
+          }
+
           imported.push({
             id:          `import_${cols[1]}_${compRaw}_${year}_${session}_${Date.now()}_${Math.random()}`,
             subjectCode: cols[1],
@@ -283,7 +314,10 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
             status:      (cols[9] as any) || 'done',
           });
         });
-        if (imported.length === 0) { setImportMsg('No valid rows found in file. Make sure it\'s a PrepFlow export.'); return; }
+        if (imported.length === 0) {
+          setImportMsg('❌ No valid papers found. Make sure this is a PrepFlow export and the data rows are intact.');
+          return;
+        }
         // Merge with existing (imported wins on duplicate key)
         const merged = [...(progress || [])];
         imported.forEach(imp => {
@@ -291,8 +325,9 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
           if (idx >= 0) merged[idx] = imp; else merged.push(imp);
         });
         onUpdateProgress?.(merged);
-        setImportMsg(`✓ Imported ${imported.length} paper${imported.length !== 1 ? 's' : ''} successfully!`);
-        setTimeout(() => setImportMsg(''), 4000);
+        const skipNote = skipped > 0 ? ` (${skipped} row${skipped !== 1 ? 's' : ''} skipped — invalid data)` : '';
+        setImportMsg(`✓ Imported ${imported.length} paper${imported.length !== 1 ? 's' : ''} successfully!${skipNote}`);
+        setTimeout(() => setImportMsg(''), 5000);
       } catch (err) {
         setImportMsg('Failed to parse file. Make sure it\'s a PrepFlow CSV export.');
       }
