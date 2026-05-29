@@ -355,10 +355,15 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
   const subjData=getSubjectByCode(subject.code);
   if(!subjData)return null;
   const color=getSubjectColor(subject.code).hex;
+  // Expand year range to include any years that already have logged entries,
+  // so data logged under a previous yearsRange setting remains visible in the grid.
+  const entryYears=progress.filter(p=>p.subjectCode===subject.code).map(p=>Number(p.year));
+  const effectiveFrom=entryYears.length>0?Math.min(yearRange.from,...entryYears):yearRange.from;
+  const effectiveTo=entryYears.length>0?Math.max(yearRange.to,...entryYears):yearRange.to;
   const columns:{year:number;session:'m'|'s'|'w'}[]=[];
-  for(let y=yearRange.from;y<=yearRange.to;y++)SESSIONS.forEach(s=>columns.push({year:y,session:s}));
+  for(let y=effectiveFrom;y<=effectiveTo;y++)SESSIONS.forEach(s=>columns.push({year:y,session:s}));
   const rows=subjData.components.filter(c=>subject.components.includes(c.code));
-  const getEntry=(comp:string,year:number,session:string)=>progress.find(p=>p.subjectCode===subject.code&&p.component===comp&&p.year===year&&p.session===session);
+  const getEntry=(comp:string,year:number,session:string)=>progress.find(p=>p.subjectCode===subject.code&&p.component===comp&&Number(p.year)===year&&String(p.session)===String(session));
   const doneEntries=progress.filter(p=>p.subjectCode===subject.code);
   const avgPct=doneEntries.length>0?(doneEntries.reduce((a,p)=>a+p.score,0)/doneEntries.reduce((a,p)=>a+p.maxScore,0))*100:0;
   const avgGrade=doneEntries.length>0?gradeFromPct(avgPct):null;
