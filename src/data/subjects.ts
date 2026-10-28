@@ -369,3 +369,36 @@ export function getSubjectsByLevel(level: 'IGCSE' | 'AS Level' | 'A Level'): Sub
 export function getSubjectByCode(code: string): SubjectData | undefined {
   return subjectsDatabase.find(s => s.code === code);
 }
+
+// ─── Variant 4 ("extra") papers ──────────────────────────────────────────────
+// Most papers only have variants 1, 2, 3 (e.g. 11, 12, 13). Very rarely a
+// variant 4 exists (14, 24, 34, 44). These are optional "bonus" papers:
+// they can be logged, but they are NOT counted in the progress indicators.
+export function isExtraVariant(code: string): boolean {
+  return code.length === 2 && code.endsWith('4');
+}
+
+// Looks up a paper's details. For an extra variant (e.g. "14") it borrows the
+// name and max marks from the same paper group (e.g. "11").
+export function getComponentData(subjectCode: string, code: string) {
+  const subj = getSubjectByCode(subjectCode);
+  if (!subj) return undefined;
+  const direct = subj.components.find(c => c.code === code);
+  if (direct) return direct;
+  if (isExtraVariant(code)) {
+    const sibling = subj.components.find(c => c.code[0] === code[0]);
+    if (sibling) return { ...sibling, code };
+  }
+  return undefined;
+}
+
+// The possible variant-4 papers for the paper groups a student has selected.
+// e.g. selected ['11','12','13','31','32','33'] -> papers 14 and 34
+export function getExtraComponents(subjectCode: string, selectedCodes: string[]) {
+  const groups = Array.from(
+    new Set(selectedCodes.filter(c => !isExtraVariant(c)).map(c => c[0]))
+  ).sort();
+  return groups
+    .map(g => getComponentData(subjectCode, `${g}4`))
+    .filter((c): c is { code: string; name: string; maxMarks: number } => !!c);
+}
