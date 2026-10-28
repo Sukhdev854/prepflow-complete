@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { StudentProfile, ProgressEntry } from '../App';
-import { getSubjectByCode } from '../data/subjects';
+import { getSubjectByCode, getComponentData, getExtraComponents, isExtraVariant } from '../data/subjects';
 import { getSubjectColor } from '../utils/subjectColors';
 import {
   Plus, Trash2, ChevronRight, ChevronLeft, CheckCircle,
@@ -86,11 +86,15 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
   const [difficulty,setDiff]=useState<Difficulty|undefined>();
   const [saved,setSaved]=useState(false);
   const [overrideDup,setOverride]=useState(false);
+  const [showV4,setShowV4]=useState(false);
 
   const subj=profile.subjects.find(s=>s.code===subjectCode);
   const subjData=subjectCode?getSubjectByCode(subjectCode):null;
-  const compData=subjData?.components.find(c=>c.code===component);
-  const avail=subjData?.components.filter(c=>subj?.components.includes(c.code)).filter(c=>isSessionAvailable(c.code,session)&&!isFMUnavailable(subjectCode,c.code))||[];
+  const compData=subjectCode?getComponentData(subjectCode,component):undefined;
+  const baseAvail=subjData?.components.filter(c=>subj?.components.includes(c.code)).filter(c=>isSessionAvailable(c.code,session)&&!isFMUnavailable(subjectCode,c.code))||[];
+  // Rare variant 4 papers (14, 24, 34...) — optional, not counted in progress
+  const allExtras=subj&&subjectCode?getExtraComponents(subjectCode,subj.components).filter(c=>isSessionAvailable(c.code,session)&&!isFMUnavailable(subjectCode,c.code)):[];
+  const avail=[...baseAvail,...(showV4?allExtras:[])].sort((a,b)=>a.code.localeCompare(b.code));
 
   // Subject-specific year range
   const subjYearFrom=subj?.yearsRange?.from??2017;
@@ -99,7 +103,7 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
 
   const handleSubjectSelect=(code:string)=>{
     const s=profile.subjects.find(s=>s.code===code);
-    setSubject(code);setComponent('');setOverride(false);
+    setSubject(code);setComponent('');setOverride(false);setShowV4(false);
     setYear(s?.yearsRange?.to??2025);setStep(2);
   };
 
@@ -204,11 +208,18 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
                   :avail.map(c=>{const sel=component===c.code;return(
                     <button key={c.code} onClick={()=>{setComponent(c.code);setOverride(false);}}
                       style={{padding:'11px 14px',borderRadius:10,cursor:'pointer',border:'none',textAlign:'left',background:sel?`${color}18`:'rgba(255,255,255,0.03)',outline:sel?`2px solid ${color}`:'1px solid var(--border-dim)',transition:'all 0.15s',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span style={{fontSize:13,color:'var(--text-primary)',fontWeight:sel?600:400}}>Paper {c.code} — {c.name}</span>
+                      <span style={{fontSize:13,color:'var(--text-primary)',fontWeight:sel?600:400}}>Paper {c.code} — {c.name}{isExtraVariant(c.code)&&<span style={{marginLeft:8,fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:99,background:'rgba(6,182,212,0.15)',color:'var(--accent-cyan)'}}>Variant 4 · bonus</span>}</span>
                       <span style={{fontSize:11,color:'var(--text-muted)'}}>/{c.maxMarks}</span>
                     </button>
                   );})}
               </div>
+              {allExtras.length>0&&(
+                <button onClick={()=>{const next=!showV4;setShowV4(next);if(!next&&isExtraVariant(component))setComponent('');setOverride(false);}}
+                  style={{marginTop:10,padding:'8px 14px',borderRadius:99,fontSize:12,fontWeight:600,cursor:'pointer',border:'1px dashed rgba(6,182,212,0.4)',background:showV4?'rgba(6,182,212,0.15)':'transparent',color:'var(--accent-cyan)'}}>
+                  {showV4?'✓ Showing variant 4 papers (tap to hide)':'+ Add a variant 4 paper (rare)'}
+                </button>
+              )}
+              {showV4&&<div style={{fontSize:11,color:'var(--text-dim)',marginTop:6}}>Variant 4 papers are bonus — they don't count towards your paper-completion progress.</div>}
             </div>
             {/* Duplicate warning */}
             {existingEntry&&(
@@ -352,6 +363,7 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
   onSave:(e:ProgressEntry)=>void;onClear:(sc:string,comp:string,year:number,session:string)=>void;
   yearRange:{from:number;to:number};
 }){
+  const [manualV4,setManualV4]=useState(false);
   const subjData=getSubjectByCode(subject.code);
   if(!subjData)return null;
   const color=getSubjectColor(subject.code).hex;
@@ -362,7 +374,12 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
   const effectiveTo=entryYears.length>0?Math.max(yearRange.to,...entryYears):yearRange.to;
   const columns:{year:number;session:'m'|'s'|'w'}[]=[];
   for(let y=effectiveFrom;y<=effectiveTo;y++)SESSIONS.forEach(s=>columns.push({year:y,session:s}));
-  const rows=subjData.components.filter(c=>subject.components.includes(c.code));
+  const baseRows=subjData.components.filter(c=>subject.components.includes(c.code));
+  // Optional variant 4 rows (14, 24, 34...). Auto-shown if you've already logged one.
+  const extraRows=getExtraComponents(subject.code,subject.components);
+  const hasExtraEntries=progress.some(p=>p.subjectCode===subject.code&&isExtraVariant(p.component));
+  const showV4=manualV4||hasExtraEntries;
+  const rows=(showV4?[...baseRows,...extraRows]:baseRows).sort((a,b)=>a.code.localeCompare(b.code));
   const getEntry=(comp:string,year:number,session:string)=>progress.find(p=>p.subjectCode===subject.code&&p.component===comp&&Number(p.year)===year&&String(p.session)===String(session));
   const doneEntries=progress.filter(p=>p.subjectCode===subject.code);
   const avgPct=doneEntries.length>0?(doneEntries.reduce((a,p)=>a+p.score,0)/doneEntries.reduce((a,p)=>a+p.maxScore,0))*100:0;
@@ -375,6 +392,13 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
         <span style={{fontSize:11,color:'var(--text-muted)',fontFamily:'monospace'}}>{subject.code}</span>
         {avgGrade&&<><span style={{fontSize:11,color:'var(--text-muted)'}}>Avg:</span><span style={{fontFamily:'var(--font-display)',fontSize:14,fontWeight:800,color:gradeColor(avgGrade)}}>{avgGrade}</span><span style={{fontSize:11,color:'var(--text-muted)'}}>({avgPct.toFixed(0)}%)</span></>}
         <span style={{fontSize:11,color:'var(--text-muted)',marginLeft:8}}>{doneEntries.length} logged</span>
+        {extraRows.length>0&&(
+          <button onClick={()=>{if(!hasExtraEntries)setManualV4(v=>!v);}} disabled={hasExtraEntries}
+            title={hasExtraEntries?'Hidden rows can\'t be removed while variant 4 scores are logged':'Show/hide rare variant 4 papers (not counted in progress)'}
+            style={{padding:'4px 10px',borderRadius:99,fontSize:10,fontWeight:700,cursor:hasExtraEntries?'default':'pointer',border:'1px dashed rgba(6,182,212,0.45)',background:showV4?'rgba(6,182,212,0.15)':'transparent',color:'var(--accent-cyan)'}}>
+            {showV4?'✓ Variant 4':'+ Variant 4'}
+          </button>
+        )}
         <div style={{display:'flex',gap:6,alignItems:'center',marginLeft:12,fontSize:10,color:'var(--text-dim)'}}>
           {[{c:'#34d399',l:'A/A*'},{c:'#fbbf24',l:'B/C'},{c:'#ef4444',l:'D/E/U'}].map(x=>(
             <span key={x.l} style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:2,background:`${x.c}40`,border:`1px solid ${x.c}`,display:'inline-block'}}/>{x.l}</span>
@@ -410,6 +434,7 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
                     <div style={{fontSize:14,fontWeight:700,color:isGreyed?'rgba(255,255,255,0.18)':'var(--text-primary)',lineHeight:1}}>{comp.code}</div>
                     <div style={{fontSize:9,color:'var(--text-dim)',marginTop:2}}>/{comp.maxMarks}</div>
                     {isGreyed&&<div style={{fontSize:8,color:'rgba(245,158,11,0.5)',marginTop:1}}>unavail</div>}
+                    {isExtraVariant(comp.code)&&<div style={{fontSize:8,color:'var(--accent-cyan)',marginTop:1,fontWeight:700}}>BONUS</div>}
                   </td>
                   {columns.map((col,ci)=>{
                     const cellGreyed=isGreyed||!isSessionAvailable(comp.code,col.session);
