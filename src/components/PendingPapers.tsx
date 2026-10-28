@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { StudentProfile, ProgressEntry } from '../App';
-import { getSubjectByCode } from '../data/subjects';
+import { getSubjectByCode, getComponentData, isExtraVariant } from '../data/subjects';
 import { getSubjectColor } from '../utils/subjectColors';
 import {
   Download, ExternalLink, CheckCircle, Circle, Clock,
@@ -23,6 +23,7 @@ interface Paper {
   session: string;
   completed: boolean;
   entry?: ProgressEntry;
+  extra?: boolean; // rare variant 4 paper — shown, but not counted in progress
 }
 
 type KanbanCol = 'todo' | 'in-progress' | 'to-mark' | 'done';
@@ -123,7 +124,7 @@ function PaperCard({
               {paper.subjectName.split(' ').slice(0, 3).join(' ')}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-              Paper {paper.component} · {paper.year} {SESSION_SHORT[paper.session]}
+              Paper {paper.component}{paper.extra ? ' (V4 bonus)' : ''} · {paper.year} {SESSION_SHORT[paper.session]}
             </div>
           </div>
           {grade !== null && (
@@ -326,6 +327,17 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
         });
       });
     });
+    // Rare variant 4 papers (14, 24, 34...): only shown once logged, never counted in progress
+    progress.forEach(entry => {
+      if (!isExtraVariant(entry.component)) return;
+      const subject = profile.subjects.find(s => s.code === entry.subjectCode);
+      if (!subject) return;
+      papers.push({
+        subjectName: subject.name, subjectCode: subject.code,
+        component: entry.component, year: entry.year, session: entry.session,
+        completed: entry.status === 'done', entry, extra: true,
+      });
+    });
     return papers;
   }, [profile, progress]);
 
@@ -358,8 +370,11 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
   }, [allPapers, search, filterSubject, filterComponent]);
 
   // Stats
-  const total = allPapers.length;
-  const done = allPapers.filter(p => p.completed).length;
+  // Variant 4 (extra) papers are NOT counted in the progress indicator
+  const countedPapers = allPapers.filter(p => !p.extra);
+  const extraCount = allPapers.length - countedPapers.length;
+  const total = countedPapers.length;
+  const done = countedPapers.filter(p => p.completed).length;
   const completionPct = total > 0 ? (done / total) * 100 : 0;
 
   // Move a paper to a column (update its status in progress)
@@ -372,8 +387,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
 
     if (!paper.entry) {
       // No entry yet — create a placeholder with 0 score
-      const subjData = getSubjectByCode(paper.subjectCode);
-      const compData = subjData?.components.find(c => c.code === paper.component);
+      const compData = getComponentData(paper.subjectCode, paper.component);
       if (!compData) return;
       const newEntry: ProgressEntry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -433,7 +447,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
               {completionPct.toFixed(0)}% Complete
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-              {done} of {total} papers done
+              {done} of {total} papers done{extraCount > 0 && <span style={{ color: 'var(--accent-cyan)' }}> · +{extraCount} bonus variant 4 (not counted)</span>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
@@ -441,7 +455,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
               <div key={col} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                 <span style={{ color: cfg.color }}>{cfg.icon}</span>
                 <span style={{ color: 'var(--text-muted)' }}>{cfg.label}:</span>
-                <span style={{ fontWeight: 700, color: cfg.color }}>{colPapers[col as KanbanCol].length}</span>
+                <span style={{ fontWeight: 700, color: cfg.color }}>{colPapers[col as KanbanCol].filter(p => !p.extra).length}</span>
               </div>
             ))}
           </div>
@@ -464,9 +478,9 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
           className="input-field" style={{ flex: '0 0 auto', width: 'auto', padding: '9px 12px', fontSize: 13 }}>
           <option value="all">All Papers</option>
           {Array.from(new Set(
-            profile.subjects
-              .filter(s => filterSubject === 'all' || s.code === filterSubject)
-              .flatMap(s => s.components)
+            allPapers
+              .filter(p => filterSubject === 'all' || p.subjectCode === filterSubject)
+              .map(p => p.component)
           )).sort().map(comp => (
             <option key={comp} value={comp}>Paper {comp}</option>
           ))}
@@ -580,7 +594,7 @@ export function PendingPapers({ profile, progress, onUpdateProgress }: Props) {
                       <div style={{ fontSize: 13, fontWeight: 600, color: isCompleted ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                         {paper.subjectName}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Paper {paper.component}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Paper {paper.component}{paper.extra ? ' · V4 bonus' : ''}</div>
                     </div>
                   </div>
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{paper.year}</span>
