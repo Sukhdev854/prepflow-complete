@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { StudentProfile, ProgressEntry, StreakData } from '../App';
 import { getSubjectColor } from '../utils/subjectColors';
-import { getSubjectByCode } from '../data/subjects';
+import { getSubjectByCode, isExtraVariant } from '../data/subjects';
 import {
   TrendingUp, TrendingDown, Target, Flame, Zap, BookOpen,
   Award, ChevronRight, BarChart2, Activity, Star, ArrowRight,
@@ -157,14 +157,20 @@ export function Dashboard({ profile, progress, streak, onNavigate }: DashboardPr
     // Per-subject stats
     const subjectStats = profile.subjects.map(subj => {
       const sp = done.filter(p => p.subjectCode === subj.code);
+      // Variant 4 (bonus) papers are not counted in completion progress
+      const spCounted = sp.filter(p => !isExtraVariant(p.component));
       const sScore = sp.reduce((s, p) => s + p.score, 0);
       const sMax = sp.reduce((s, p) => s + p.maxScore, 0);
       const avgP = sMax > 0 ? (sScore / sMax) * 100 : 0;
-      const totalPapers = subj.components.length * 3 * (subj.yearsRange.to - subj.yearsRange.from + 1);
+      // Feb/March only has variant-2 papers, so those components have 3 sessions a year, the rest 2
+      const sessionsPerYear = subj.components
+        .filter(c => !isExtraVariant(c))
+        .reduce((n, c) => n + (c.endsWith('2') ? 3 : 2), 0);
+      const totalPapers = sessionsPerYear * (subj.yearsRange.to - subj.yearsRange.from + 1);
       return {
         code: subj.code, name: subj.name,
-        avgPct: avgP, completed: sp.length, total: totalPapers,
-        completionRate: totalPapers > 0 ? sp.length / totalPapers : 0,
+        avgPct: avgP, completed: spCounted.length, total: totalPapers,
+        completionRate: totalPapers > 0 ? Math.min(spCounted.length / totalPapers, 1) : 0,
         grade: gradeFromPercent(avgP),
         color: getSubjectColor(subj.code).hex,
       };
@@ -200,7 +206,9 @@ export function Dashboard({ profile, progress, streak, onNavigate }: DashboardPr
     // Pending count
     const pending = progress.filter(p => !p.status || p.status === 'not-started' || p.status === 'in-progress' || p.status === 'to-mark' || p.status === 'to-review').length;
 
-    return { done: done.length, avgPct, subjectStats, recent, weeks, focus, pending, totalPapers: progress.length };
+    const countedDone = done.filter(p => !isExtraVariant(p.component)).length;
+    const countedLogged = progress.filter(p => !isExtraVariant(p.component)).length;
+    return { done: countedDone, avgPct, subjectStats, recent, weeks, focus, pending, totalPapers: countedLogged };
   }, [progress, profile]);
 
   const clockStr = liveTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
