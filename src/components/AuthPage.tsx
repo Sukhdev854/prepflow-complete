@@ -5,9 +5,10 @@ import {
 } from 'lucide-react';
 import { signUp, signIn, AuthSession } from '../utils/cloudAuth';
 import { subjectsDatabase } from '../data/subjects';
+import type { StudentProfile } from '../App';
 
 interface AuthPageProps {
-  onAuthSuccess: (session: AuthSession) => void;
+  onAuthSuccess: (session: AuthSession, initialProfile?: StudentProfile) => void;
   onBack?: () => void;
 }
 
@@ -79,7 +80,7 @@ interface SignUpData {
   level: Level; selectedSubjects: string[];
 }
 
-function SignUpFlow({ onSuccess, onBack }: { onSuccess: (s: AuthSession) => void; onBack: () => void }) {
+function SignUpFlow({ onSuccess, onBack }: { onSuccess: (s: AuthSession, p?: StudentProfile) => void; onBack: () => void }) {
   const [step, setStep]   = useState<1|2|3>(1);
   const [data, setData]   = useState<SignUpData>({ name:'', username:'', email:'', password:'', level:'A Level', selectedSubjects:[] });
   const [showPw, setShowPw] = useState(false);
@@ -107,8 +108,25 @@ function SignUpFlow({ onSuccess, onBack }: { onSuccess: (s: AuthSession) => void
     setLoading(true); setError('');
     const result = await signUp(data.username, data.password, data.email, data.name);
     if (result.success && result.session) {
+      // Turn the subjects picked on screen 2 into a real profile, so they are saved
+      // (previously they were collected but thrown away). All papers are selected by
+      // default and can be trimmed later with the new Edit button in Settings.
+      const profile: StudentProfile = {
+        name: data.name.trim(),
+        level: data.level,
+        targetGrade: 'A*',
+        yearsRange: { from: 2021, to: 2026 },
+        subjects: data.selectedSubjects
+          .map(code => subjectsDatabase.find(s => s.code === code))
+          .filter((s): s is NonNullable<typeof s> => !!s)
+          .map(s => ({
+            name: s.name, code: s.code,
+            components: s.components.map(c => c.code),
+            yearsRange: { from: 2021, to: 2026 },
+          })),
+      };
       setStep(3);
-      setTimeout(() => onSuccess(result.session!), 1200);
+      setTimeout(() => onSuccess(result.session!, profile), 1200);
     } else {
       setError(result.error || 'Failed to create account'); setLoading(false);
     }
