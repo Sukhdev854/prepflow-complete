@@ -93,7 +93,7 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
   const compData=subjectCode?getComponentData(subjectCode,component):undefined;
   const baseAvail=subjData?.components.filter(c=>subj?.components.includes(c.code)).filter(c=>isSessionAvailable(c.code,session)&&!isFMUnavailable(subjectCode,c.code))||[];
   // Rare variant 4 papers (14, 24, 34...) — optional, not counted in progress
-  const allExtras=subj&&subjectCode?getExtraComponents(subjectCode,subj.components).filter(c=>isSessionAvailable(c.code,session)&&!isFMUnavailable(subjectCode,c.code)):[];
+  const allExtras=subj&&subjectCode?getExtraComponents(subjectCode,subj.components):[];
   const avail=[...baseAvail,...(showV4?allExtras:[])].sort((a,b)=>a.code.localeCompare(b.code));
 
   // Subject-specific year range
@@ -191,7 +191,7 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
               </div>
               <div>
                 <label style={{display:'block',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--text-muted)',marginBottom:8}}>Session</label>
-                <select value={session} onChange={e=>{setSession(e.target.value as any);setOverride(false);if(!isSessionAvailable(component,e.target.value))setComponent('');}} className="input-field">
+                <select value={session} onChange={e=>{setSession(e.target.value as any);setOverride(false);if(!isExtraVariant(component)&&!isSessionAvailable(component,e.target.value))setComponent('');}} className="input-field">
                   <option value="m">Feb/March</option>
                   <option value="s">May/June</option>
                   <option value="w">Oct/Nov</option>
@@ -425,7 +425,7 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
           </thead>
           <tbody>
             {rows.map((comp,rowIdx)=>{
-              const isGreyed=isFMUnavailable(subject.code,comp.code);
+              const isGreyed=!isExtraVariant(comp.code)&&isFMUnavailable(subject.code,comp.code);
               return(
                 <tr key={comp.code} style={{borderBottom:rowIdx<rows.length-1?'1px solid rgba(255,255,255,0.04)':'none',transition:'background 0.1s'}}
                   onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.012)')}
@@ -437,7 +437,7 @@ function SubjectGridTable({subject,progress,onSave,onClear,yearRange}:{
                     {isExtraVariant(comp.code)&&<div style={{fontSize:8,color:'var(--accent-cyan)',marginTop:1,fontWeight:700}}>BONUS</div>}
                   </td>
                   {columns.map((col,ci)=>{
-                    const cellGreyed=isGreyed||!isSessionAvailable(comp.code,col.session);
+                    const cellGreyed=isGreyed||(!isExtraVariant(comp.code)&&!isSessionAvailable(comp.code,col.session));
                     return(
                       <GridCell key={ci} subjectCode={subject.code} component={comp.code} year={col.year} session={col.session} maxMarks={comp.maxMarks}
                         entry={getEntry(comp.code,col.year,col.session)} greyed={cellGreyed}
