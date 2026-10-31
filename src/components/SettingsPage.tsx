@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { StudentProfile, SelectedSubject, ProgressEntry } from '../App';
 import { getSubjectsByLevel, getSubjectByCode, SubjectData } from '../data/subjects';
 import {
   User, BookOpen, Target, Save, Plus, X, Check,
   ChevronRight, ChevronLeft, GraduationCap, Search,
-  Trash2, Palette, Download, Upload
+  Trash2, Palette, Download, Upload, Pencil
 } from 'lucide-react';
 
 interface Props {
@@ -183,11 +184,105 @@ function SubjectPickerPanel({
   );
 }
 
+// ─── EDIT AN EXISTING SUBJECT (papers + years) ───────────────────────────────
+function SubjectEditPanel({ subject, progress, onApply, onCancel }: {
+  subject: SelectedSubject;
+  progress: ProgressEntry[];
+  onApply: (updated: SelectedSubject) => void;
+  onCancel: () => void;
+}) {
+  const data = getSubjectByCode(subject.code);
+  const [components, setComponents] = useState<string[]>(subject.components);
+  const [yearFrom, setYearFrom] = useState(subject.yearsRange.from);
+  const [yearTo,   setYearTo]   = useState(subject.yearsRange.to);
+
+  const toggle = (code: string) =>
+    setComponents(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]);
+
+  const all = data?.components || [];
+  const hasCore = all.some(c => /\(Core\)/.test(c.name));
+  const hasExt  = all.some(c => /\(Extended\)/.test(c.name));
+  const pick = (list: typeof all) => setComponents(list.map(c => c.code));
+
+  // Logged scores for papers that get removed stay safe — they are just hidden
+  const removed = subject.components.filter(c => !components.includes(c));
+  const hiddenCount = progress.filter(p => p.subjectCode === subject.code && removed.includes(p.component)).length;
+
+  const chip: CSSProperties = { padding:'5px 12px', borderRadius:99, fontSize:11, fontWeight:600, cursor:'pointer', background:'rgba(255,255,255,0.05)', border:'1px solid var(--border-dim)', color:'var(--text-muted)' };
+  const lbl: CSSProperties = { display:'block', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:'var(--text-muted)', marginBottom:6 };
+
+  return (
+    <div style={{ padding:16, borderRadius:12, background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.3)', display:'flex', flexDirection:'column', gap:14 }}>
+      <div>
+        <div style={{ fontSize:14, fontWeight:700, color:'var(--text-primary)' }}>Edit {subject.name}</div>
+        <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>{subject.code}</div>
+      </div>
+
+      <div>
+        <label style={lbl}>Papers you're doing</label>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
+          <button style={chip} onClick={() => pick(all)}>All papers</button>
+          {hasCore && <button style={chip} onClick={() => pick(all.filter(c => !/\(Extended\)/.test(c.name)))}>Core tier only</button>}
+          {hasExt  && <button style={chip} onClick={() => pick(all.filter(c => !/\(Core\)/.test(c.name)))}>Extended tier only</button>}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(230px,1fr))', gap:6 }}>
+          {all.map(c => {
+            const on = components.includes(c.code);
+            return (
+              <button key={c.code} onClick={() => toggle(c.code)}
+                style={{ padding:'9px 12px', borderRadius:8, cursor:'pointer', border:'none', textAlign:'left', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8,
+                  background: on ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.03)',
+                  outline: on ? '2px solid rgba(124,58,237,0.4)' : '1px solid var(--border-dim)' }}>
+                <span style={{ fontSize:12, color:'var(--text-primary)', fontWeight: on ? 600 : 400 }}>
+                  Paper {c.code} — {c.name} <span style={{ color:'var(--text-muted)', fontWeight:400 }}>/{c.maxMarks}</span>
+                </span>
+                {on && <Check size={13} color="var(--accent-violet-bright)"/>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div>
+          <label style={lbl}>Papers From</label>
+          <select value={yearFrom} onChange={e => { const v = Number(e.target.value); setYearFrom(v); if (yearTo < v) setYearTo(v); }} className="input-field">
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Papers To</label>
+          <select value={yearTo} onChange={e => setYearTo(Number(e.target.value))} className="input-field">
+            {YEARS.filter(y => y >= yearFrom).map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {hiddenCount > 0 && (
+        <div style={{ fontSize:12, color:'var(--accent-amber)', padding:'8px 12px', borderRadius:8, background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)' }}>
+          {hiddenCount} logged score{hiddenCount > 1 ? 's' : ''} for papers you removed will be hidden (not deleted — add the paper back to see {hiddenCount > 1 ? 'them' : 'it'} again).
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+        <button className="btn-primary" disabled={components.length === 0}
+          onClick={() => onApply({ ...subject, components: [...components].sort(), yearsRange: { from: yearFrom, to: yearTo } })}
+          style={{ opacity: components.length === 0 ? 0.5 : 1 }}>
+          <Check size={14}/> <span>Apply</span>
+        </button>
+        <button onClick={onCancel} style={{ ...chip, padding:'10px 16px', fontSize:12 }}>Cancel</button>
+        <span style={{ fontSize:11, color:'var(--text-dim)' }}>Then press “Save Changes” on this page to keep it.</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN SETTINGS PAGE ───────────────────────────────────────────────────────
 export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange, progress = [], onUpdateProgress }: Props) {
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
   const [saved, setSaved]                         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [editingCode, setEditingCode] = useState<string | null>(null);
 
   // Profile form
   const [name,        setName]     = useState(profile?.name || '');
@@ -486,7 +581,11 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {subjects.map(s => (
+            {subjects.map(s => editingCode === s.code ? (
+              <SubjectEditPanel key={s.code} subject={s} progress={progress}
+                onCancel={() => setEditingCode(null)}
+                onApply={updated => { setSubjects(prev => prev.map(x => x.code === updated.code ? updated : x)); setEditingCode(null); }} />
+            ) : (
               <div key={s.code} style={{ padding:'13px 16px', borderRadius:10, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border-dim)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13, fontWeight:600, color:'var(--text-primary)' }}>{s.name}</div>
@@ -494,6 +593,13 @@ export function SettingsPage({ profile, onUpdateProfile, username, onPrefsChange
                     {s.code} · Papers: {s.components.join(', ')} · {s.yearsRange.from}–{s.yearsRange.to}
                   </div>
                 </div>
+                {showDeleteConfirm !== s.code && (
+                  <button onClick={() => setEditingCode(s.code)} title="Edit papers & years" style={{ background:'none', border:'1px solid transparent', borderRadius:8, padding:7, cursor:'pointer', color:'var(--text-dim)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color='var(--accent-violet-bright)'; e.currentTarget.style.background='rgba(124,58,237,0.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color='var(--text-dim)'; e.currentTarget.style.background='none'; }}>
+                    <Pencil size={14}/>
+                  </button>
+                )}
                 {showDeleteConfirm === s.code ? (
                   <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                     <span style={{ fontSize:12, color:'var(--accent-amber)' }}>Remove?</span>
