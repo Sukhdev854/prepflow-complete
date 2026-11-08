@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react';
 import { StudentProfile, ProgressEntry } from '../App';
 import { getSubjectByCode, getComponentData, getExtraComponents, isExtraVariant } from '../data/subjects';
 import { getSubjectColor } from '../utils/subjectColors';
+import { getBestThreshold } from '../data/thresholds';
 import {
   Plus, Trash2, ChevronRight, ChevronLeft, CheckCircle,
   Search, X, LayoutGrid, List, ArrowLeft, Lock
@@ -16,24 +17,17 @@ type Status = 'done'|'in-progress'|'to-mark'|'to-review'|'not-started';
 type Difficulty = 1|2|3|4|5;
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
+// Real Cambridge numbers come from src/data/thresholds.generated.json
+// (filled in automatically by the "Update Cambridge thresholds" GitHub Action).
 export interface GradeThreshold {
-  subjectCode:string;component:string;year:number;session:string;
-  maxMarks:number;aStar?:number;a:number;b:number;c:number;d:number;e:number;
+  maxMarks:number;a:number;b:number;c:number;d:number;e:number;f?:number;g?:number;
+  typical?:boolean; // true = average of other years, not this exact series
 }
-const THRESHOLDS:Record<string,GradeThreshold>={
-  '9706_w_2025_12':{subjectCode:'9706',component:'12',year:2025,session:'w',maxMarks:30,a:22,b:18,c:15,d:12,e:10},
-  '9706_w_2025_13':{subjectCode:'9706',component:'13',year:2025,session:'w',maxMarks:30,a:23,b:18,c:15,d:13,e:11},
-  '9706_w_2025_11':{subjectCode:'9706',component:'11',year:2025,session:'w',maxMarks:30,a:24,b:19,c:16,d:14,e:12},
-  '9706_s_2025_11':{subjectCode:'9706',component:'11',year:2025,session:'s',maxMarks:30,a:21,b:16,c:14,d:12,e:11},
-  '9706_s_2025_12':{subjectCode:'9706',component:'12',year:2025,session:'s',maxMarks:30,a:22,b:18,c:15,d:13,e:11},
-  '9706_m_2025_22':{subjectCode:'9706',component:'22',year:2025,session:'m',maxMarks:30,a:22,b:18,c:15,d:13,e:11},
-  '9609_w_2025_11':{subjectCode:'9609',component:'11',year:2025,session:'w',maxMarks:30,a:22,b:17,c:14,d:12,e:10},
-  '9709_w_2025_11':{subjectCode:'9709',component:'11',year:2025,session:'w',maxMarks:75,aStar:65,a:55,b:45,c:37,d:29,e:22},
-};
-export function getThreshold(c:string,s:string,y:number,comp:string):GradeThreshold|null{return THRESHOLDS[`${c}_${s}_${y}_${comp}`]||null;}
+export function getThreshold(c:string,s:string,y:number,comp:string):GradeThreshold|null{return getBestThreshold(c,s,y,comp);}
+// Grade for ONE paper. Cambridge only awards A* for the whole subject, so the top paper grade is A.
 export function gradeFromThreshold(score:number,t:GradeThreshold):string{
-  if(t.aStar!==undefined&&score>=t.aStar)return'A*';
-  if(score>=t.a)return'A';if(score>=t.b)return'B';if(score>=t.c)return'C';if(score>=t.d)return'D';if(score>=t.e)return'E';return'U';
+  if(score>=t.a)return'A';if(score>=t.b)return'B';if(score>=t.c)return'C';if(score>=t.d)return'D';if(score>=t.e)return'E';
+  if(t.f!==undefined&&score>=t.f)return'F';if(t.g!==undefined&&score>=t.g)return'G';return'U';
 }
 export function gradeFromPct(pct:number):string{
   if(pct>=90)return'A*';if(pct>=80)return'A';if(pct>=70)return'B';if(pct>=60)return'C';if(pct>=50)return'D';if(pct>=40)return'E';return'U';
@@ -245,7 +239,7 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
             {canStep3&&grade&&(
               <div style={{padding:'16px 20px',borderRadius:14,background:`linear-gradient(135deg,${color}15,${color}05)`,border:`1px solid ${color}30`,display:'flex',alignItems:'center',justifyContent:'space-between',position:'relative',overflow:'hidden'}}>
                 <div>
-                  <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:3}}>{threshold?'📊 Real thresholds':'📐 % estimate'}</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:3}}>{threshold?(threshold.typical?'📊 Typical thresholds (average of past years)':'📊 Real thresholds'):'📐 % estimate'}</div>
                   <div style={{fontFamily:'var(--font-display)',fontSize:'2.2rem',fontWeight:900,color:gradeColor(grade)}}>{grade}</div>
                 </div>
                 <div style={{textAlign:'right'}}>
@@ -259,7 +253,6 @@ function LogPaperPage({profile,progress,onAdd,onBack}:{
               <div style={{padding:'12px 16px',borderRadius:12,background:'rgba(255,255,255,0.03)',border:'1px solid var(--border-dim)'}}>
                 <div style={{fontSize:10,fontWeight:700,color:'var(--text-muted)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.05em'}}>Grade Thresholds</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {threshold.aStar!==undefined&&<div style={{padding:'3px 9px',borderRadius:7,background:'rgba(16,185,129,0.15)',border:'1px solid rgba(16,185,129,0.3)',fontSize:11,fontWeight:700,color:'var(--accent-emerald)'}}>A* ≥{threshold.aStar}</div>}
                   {[{g:'A',v:threshold.a,c:'var(--accent-emerald)'},{g:'B',v:threshold.b,c:'var(--accent-cyan)'},{g:'C',v:threshold.c,c:'var(--accent-amber)'},{g:'D',v:threshold.d,c:'#fb923c'},{g:'E',v:threshold.e,c:'var(--accent-red)'}].map(t=>(
                     <div key={t.g} style={{padding:'3px 9px',borderRadius:7,background:`${t.c}18`,border:`1px solid ${t.c}40`,fontSize:11,fontWeight:600,color:t.c}}>{t.g} ≥{t.v}</div>
                   ))}
