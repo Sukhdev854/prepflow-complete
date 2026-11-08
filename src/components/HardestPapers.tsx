@@ -1,114 +1,16 @@
 import { useState, useMemo } from 'react';
 import { Flame, Filter, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, Search, X, ExternalLink } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface ThresholdRow {
-  subjectCode: string;
-  subjectName: string;
-  board: string;
-  level: 'IGCSE' | 'AS Level' | 'A Level';
-  component: string;
-  year: number;
-  session: string; // m | s | w
-  maxMarks: number;
-  aStar?: number;
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  e: number;
-  difficultyScore: number; // 0-100, lower = harder
-}
+import { buildThresholdRows, hasThresholdData, thresholdsGeneratedAt } from '../data/thresholds';
+import type { ThresholdRow } from '../data/thresholds';
 
 const SESSION_LABELS: Record<string, string> = { m: 'Feb/Mar', s: 'May/Jun', w: 'Oct/Nov' };
 
-// ─── Threshold Dataset ────────────────────────────────────────────────────────
-// This is a curated dataset of real Cambridge grade thresholds.
-// The difficulty score is (A threshold / maxMarks) * 100 — lower means harder paper.
-const THRESHOLD_DATA: ThresholdRow[] = [
-  // ── Accounting 9706 ──
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:30, a:22, b:18, c:15, d:12, e:10, difficultyScore:73.3 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:30, a:23, b:18, c:15, d:13, e:11, difficultyScore:76.7 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:30, a:24, b:19, c:16, d:14, e:12, difficultyScore:80.0 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'s', maxMarks:30, a:21, b:16, c:14, d:12, e:11, difficultyScore:70.0 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'s', maxMarks:30, a:21, b:16, c:14, d:12, e:11, difficultyScore:70.0 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'s', maxMarks:30, a:22, b:18, c:15, d:13, e:11, difficultyScore:73.3 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'22', year:2025, session:'m', maxMarks:30, a:22, b:18, c:15, d:13, e:11, difficultyScore:73.3 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:30, a:20, b:16, c:13, d:11, e:9,  difficultyScore:66.7 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:30, a:19, b:15, c:12, d:10, e:8,  difficultyScore:63.3 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'13', year:2024, session:'w', maxMarks:30, a:18, b:14, c:11, d:9,  e:7,  difficultyScore:60.0 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'s', maxMarks:30, a:23, b:18, c:15, d:13, e:11, difficultyScore:76.7 },
-  { subjectCode:'9706', subjectName:'Accounting', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'s', maxMarks:30, a:24, b:19, c:16, d:14, e:12, difficultyScore:80.0 },
-
-  // ── Business 9609 ──
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:30, a:22, b:17, c:14, d:12, e:10, difficultyScore:73.3 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:30, a:21, b:16, c:13, d:11, e:9,  difficultyScore:70.0 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:30, a:19, b:15, c:12, d:10, e:8,  difficultyScore:63.3 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'22', year:2025, session:'m', maxMarks:60, a:38, b:30, c:24, d:18, e:13, difficultyScore:63.3 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:30, a:20, b:16, c:13, d:11, e:9,  difficultyScore:66.7 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:30, a:23, b:18, c:15, d:13, e:11, difficultyScore:76.7 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'13', year:2024, session:'w', maxMarks:30, a:17, b:13, c:10, d:8,  e:6,  difficultyScore:56.7 },
-  { subjectCode:'9609', subjectName:'Business', board:'Cambridge A Level', level:'A Level', component:'11', year:2023, session:'w', maxMarks:30, a:16, b:12, c:9,  d:7,  e:5,  difficultyScore:53.3 },
-
-  // ── Economics 9708 ──
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:30, a:24, b:19, c:16, d:14, e:12, difficultyScore:80.0 },
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:30, a:22, b:17, c:14, d:12, e:10, difficultyScore:73.3 },
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:30, a:20, b:15, c:12, d:10, e:8,  difficultyScore:66.7 },
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'22', year:2025, session:'m', maxMarks:30, a:21, b:16, c:13, d:11, e:9,  difficultyScore:70.0 },
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:30, a:18, b:14, c:11, d:9,  e:7,  difficultyScore:60.0 },
-  { subjectCode:'9708', subjectName:'Economics', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:30, a:19, b:15, c:12, d:10, e:8,  difficultyScore:63.3 },
-
-  // ── Mathematics 9709 ──
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:75, aStar:65, a:55, b:45, c:37, d:29, e:22, difficultyScore:73.3 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:75, aStar:60, a:50, b:41, c:33, d:25, e:18, difficultyScore:66.7 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:75, aStar:58, a:48, b:39, c:31, d:23, e:16, difficultyScore:64.0 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'22', year:2025, session:'m', maxMarks:50, aStar:43, a:36, b:29, c:23, d:17, e:12, difficultyScore:72.0 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:75, aStar:63, a:53, b:43, c:35, d:27, e:20, difficultyScore:70.7 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:75, aStar:56, a:46, b:37, c:29, d:22, e:15, difficultyScore:61.3 },
-  { subjectCode:'9709', subjectName:'Mathematics', board:'Cambridge A Level', level:'A Level', component:'11', year:2023, session:'w', maxMarks:75, aStar:52, a:43, b:34, c:26, d:19, e:13, difficultyScore:57.3 },
-
-  // ── Physics 9702 ──
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:40, a:30, b:25, c:20, d:16, e:12, difficultyScore:75.0 },
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:40, a:28, b:23, c:18, d:14, e:10, difficultyScore:70.0 },
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:40, a:26, b:21, c:16, d:12, e:9,  difficultyScore:65.0 },
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:40, a:24, b:19, c:15, d:11, e:8,  difficultyScore:60.0 },
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:40, a:22, b:17, c:13, d:10, e:7,  difficultyScore:55.0 },
-  { subjectCode:'9702', subjectName:'Physics', board:'Cambridge A Level', level:'A Level', component:'11', year:2023, session:'w', maxMarks:40, a:20, b:15, c:11, d:8,  e:6,  difficultyScore:50.0 },
-
-  // ── Chemistry 9701 ──
-  { subjectCode:'9701', subjectName:'Chemistry', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:40, a:31, b:26, c:21, d:17, e:13, difficultyScore:77.5 },
-  { subjectCode:'9701', subjectName:'Chemistry', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:40, a:29, b:24, c:19, d:15, e:11, difficultyScore:72.5 },
-  { subjectCode:'9701', subjectName:'Chemistry', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:40, a:27, b:22, c:17, d:13, e:9,  difficultyScore:67.5 },
-  { subjectCode:'9701', subjectName:'Chemistry', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:40, a:25, b:20, c:16, d:12, e:9,  difficultyScore:62.5 },
-  { subjectCode:'9701', subjectName:'Chemistry', board:'Cambridge A Level', level:'A Level', component:'12', year:2024, session:'w', maxMarks:40, a:23, b:18, c:14, d:10, e:7,  difficultyScore:57.5 },
-
-  // ── Biology 9700 ──
-  { subjectCode:'9700', subjectName:'Biology', board:'Cambridge A Level', level:'A Level', component:'11', year:2025, session:'w', maxMarks:40, a:29, b:24, c:19, d:15, e:11, difficultyScore:72.5 },
-  { subjectCode:'9700', subjectName:'Biology', board:'Cambridge A Level', level:'A Level', component:'12', year:2025, session:'w', maxMarks:40, a:27, b:22, c:17, d:13, e:10, difficultyScore:67.5 },
-  { subjectCode:'9700', subjectName:'Biology', board:'Cambridge A Level', level:'A Level', component:'13', year:2025, session:'w', maxMarks:40, a:25, b:20, c:15, d:11, e:8,  difficultyScore:62.5 },
-  { subjectCode:'9700', subjectName:'Biology', board:'Cambridge A Level', level:'A Level', component:'11', year:2024, session:'w', maxMarks:40, a:22, b:17, c:13, d:9,  e:6,  difficultyScore:55.0 },
-
-  // ── IGCSE Economics 0455 ──
-  { subjectCode:'0455', subjectName:'Economics', board:'Cambridge IGCSE', level:'IGCSE', component:'11', year:2025, session:'w', maxMarks:90, a:58, b:46, c:37, d:28, e:19, difficultyScore:64.4 },
-  { subjectCode:'0455', subjectName:'Economics', board:'Cambridge IGCSE', level:'IGCSE', component:'12', year:2025, session:'w', maxMarks:90, a:62, b:50, c:40, d:31, e:22, difficultyScore:68.9 },
-  { subjectCode:'0455', subjectName:'Economics', board:'Cambridge IGCSE', level:'IGCSE', component:'22', year:2025, session:'m', maxMarks:90, a:55, b:44, c:35, d:26, e:18, difficultyScore:61.1 },
-  { subjectCode:'0455', subjectName:'Economics', board:'Cambridge IGCSE', level:'IGCSE', component:'11', year:2024, session:'w', maxMarks:90, a:52, b:41, c:32, d:24, e:16, difficultyScore:57.8 },
-  { subjectCode:'0455', subjectName:'Economics', board:'Cambridge IGCSE', level:'IGCSE', component:'12', year:2024, session:'w', maxMarks:90, a:48, b:38, c:30, d:22, e:15, difficultyScore:53.3 },
-
-  // ── IGCSE Business 0450 ──
-  { subjectCode:'0450', subjectName:'Business Studies', board:'Cambridge IGCSE', level:'IGCSE', component:'11', year:2025, session:'w', maxMarks:80, a:52, b:42, c:34, d:26, e:19, difficultyScore:65.0 },
-  { subjectCode:'0450', subjectName:'Business Studies', board:'Cambridge IGCSE', level:'IGCSE', component:'12', year:2025, session:'w', maxMarks:80, a:56, b:45, c:36, d:28, e:20, difficultyScore:70.0 },
-  { subjectCode:'0450', subjectName:'Business Studies', board:'Cambridge IGCSE', level:'IGCSE', component:'22', year:2025, session:'m', maxMarks:80, a:48, b:38, c:30, d:22, e:15, difficultyScore:60.0 },
-  { subjectCode:'0450', subjectName:'Business Studies', board:'Cambridge IGCSE', level:'IGCSE', component:'11', year:2024, session:'w', maxMarks:80, a:45, b:36, c:28, d:21, e:14, difficultyScore:56.3 },
-
-  // ── IGCSE Mathematics 0580 ──
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'41', year:2025, session:'w', maxMarks:130, aStar:115, a:97, b:79, c:63, d:48, e:33, difficultyScore:74.6 },
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'42', year:2025, session:'w', maxMarks:130, aStar:110, a:92, b:74, c:59, d:44, e:30, difficultyScore:70.8 },
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'43', year:2025, session:'w', maxMarks:130, aStar:105, a:87, b:70, c:55, d:41, e:27, difficultyScore:66.9 },
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'42', year:2025, session:'m', maxMarks:130, aStar:108, a:90, b:72, c:57, d:42, e:28, difficultyScore:69.2 },
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'41', year:2024, session:'w', maxMarks:130, aStar:100, a:83, b:66, c:52, d:38, e:25, difficultyScore:63.8 },
-  { subjectCode:'0580', subjectName:'Mathematics', board:'Cambridge IGCSE', level:'IGCSE', component:'41', year:2023, session:'w', maxMarks:130, aStar:95,  a:78, b:62, c:48, d:35, e:22, difficultyScore:60.0 },
-];
+// ─── Threshold dataset ────────────────────────────────────────────────────────
+// Built from Cambridge's published grade-threshold tables (src/data/thresholds.generated.json,
+// refreshed automatically by a GitHub Action). Difficulty = (A threshold / max marks) x 100,
+// so a LOWER number means the paper was harder.
+const THRESHOLD_DATA: ThresholdRow[] = buildThresholdRows();
 
 // Unique values for filters
 const BOARDS = ['All Boards', ...Array.from(new Set(THRESHOLD_DATA.map(r => r.board)))];
@@ -225,7 +127,7 @@ export function HardestPapers() {
             </h1>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
-            Browse grade thresholds — filter and sort to find the hardest papers. Lower A-threshold = harder paper.
+            Browse grade thresholds — filter and sort to find the hardest papers. Lower A-threshold = harder paper. Data updated automatically from Cambridge.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -345,7 +247,7 @@ export function HardestPapers() {
         {filtered.length === 0 ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>No papers match your filters. Try adjusting the subject or year range.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{hasThresholdData() ? 'No papers match your filters. Try adjusting the subject or year range.' : 'Cambridge threshold data has not been loaded yet. Run the "Update Cambridge thresholds" action on GitHub once.'}</p>
           </div>
         ) : (
           filtered.map((row, i) => {
@@ -405,7 +307,7 @@ export function HardestPapers() {
       </div>
 
       <p style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
-        Threshold data sourced from Cambridge International. A-threshold % = (A boundary ÷ max marks) × 100. Lower % indicates a harder paper.
+        Official Cambridge International grade threshold tables{thresholdsGeneratedAt() ? ` · last updated ${thresholdsGeneratedAt()!.slice(0,10)}` : ''}. Difficulty % = (A threshold ÷ max marks) × 100 — lower means a harder paper.
       </p>
     </div>
   );
