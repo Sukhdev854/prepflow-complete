@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { StudentProfile, ProgressEntry } from '../App';
 import { getSubjectColor } from '../utils/subjectColors';
+import { uniformPctForEntry, hasThresholdData } from '../data/thresholds';
 import { TrendingUp, TrendingDown, Minus, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -108,24 +109,29 @@ function NeedCalculator({ currentPct, currentCount, targetGrade }: { currentPct:
   );
 }
 
+// Mark-weighted average of "uniform percentages": a mark that is exactly the A threshold counts
+// as 80%, B as 70%, ... (Cambridge's own percentage-uniform-mark idea). Where no threshold table
+// exists the raw percentage is used instead.
+const upct = (p: ProgressEntry) => uniformPctForEntry(p).pct;
+function weightedAvg(list: ProgressEntry[]) {
+  const tm = list.reduce((s, p) => s + p.maxScore, 0);
+  return tm > 0 ? list.reduce((s, p) => s + upct(p) * p.maxScore, 0) / tm : 0;
+}
+
 export function PredictedGrades({ profile, progress, onNavigate }: Props) {
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
   const subjectStats = useMemo(() => profile.subjects.map(subj => {
     const done = progress.filter(p => p.subjectCode === subj.code && p.status === 'done');
-    const ts = done.reduce((s, p) => s + p.score, 0);
-    const tm = done.reduce((s, p) => s + p.maxScore, 0);
-    const avgPct = tm > 0 ? (ts / tm) * 100 : 0;
+    const avgPct = weightedAvg(done);
     const byComponent = subj.components.map(compCode => {
       const cp = done.filter(p => p.component === compCode);
-      const cs = cp.reduce((s,p) => s + p.score, 0);
-      const cm = cp.reduce((s,p) => s + p.maxScore, 0);
-      return { code: compCode, count: cp.length, avgPct: cm > 0 ? (cs/cm)*100 : 0 };
+      return { code: compCode, count: cp.length, avgPct: weightedAvg(cp) };
     });
     const sorted = [...done].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const r3 = sorted.slice(0,3); const p3 = sorted.slice(3,6);
-    const recentAvg = r3.length > 0 ? r3.reduce((s,p) => s + (p.score/p.maxScore)*100,0)/r3.length : avgPct;
-    const prevAvg   = p3.length > 0 ? p3.reduce((s,p) => s + (p.score/p.maxScore)*100,0)/p3.length : avgPct;
+    const recentAvg = r3.length > 0 ? r3.reduce((s,p) => s + upct(p),0)/r3.length : avgPct;
+    const prevAvg   = p3.length > 0 ? p3.reduce((s,p) => s + upct(p),0)/p3.length : avgPct;
     const grade = gradeFromPct(avgPct);
     const color = getSubjectColor(subj.code).hex;
     const targetPct = pctForGrade(profile.targetGrade);
@@ -133,9 +139,9 @@ export function PredictedGrades({ profile, progress, onNavigate }: Props) {
   }), [profile, progress]);
 
   const donePapers = progress.filter(p => p.status === 'done');
-  const ts = donePapers.reduce((s,p) => s + p.score, 0);
-  const tm = donePapers.reduce((s,p) => s + p.maxScore, 0);
-  const overallAvgPct = tm > 0 ? (ts/tm)*100 : 0;
+  const overallAvgPct = weightedAvg(donePapers);
+  const exactCount = donePapers.filter(p => uniformPctForEntry(p).source === 'exact').length;
+  const typicalCount = donePapers.filter(p => uniformPctForEntry(p).source === 'typical').length;
   const overallGrade  = gradeFromPct(overallAvgPct);
   const targetPct     = pctForGrade(profile.targetGrade);
   const overallOnTrack = overallAvgPct >= targetPct;
@@ -161,6 +167,13 @@ export function PredictedGrades({ profile, progress, onNavigate }: Props) {
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
             {overallAvgPct > 0 ? `Averaging ${overallAvgPct.toFixed(1)}% across all subjects` : 'Record papers to see predictions'}
           </div>
+          {donePapers.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: -6, marginBottom: 12 }}>
+              {hasThresholdData()
+                ? `Grade-adjusted using Cambridge's real thresholds: ${exactCount} paper${exactCount === 1 ? '' : 's'} exact, ${typicalCount} using typical past-year thresholds, ${donePapers.length - exactCount - typicalCount} estimated from raw %.`
+                : 'Estimated from raw percentages (Cambridge threshold data not loaded yet).'}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             <span className={`badge ${overallOnTrack ? 'badge-emerald' : 'badge-amber'}`}>
               {overallOnTrack ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
