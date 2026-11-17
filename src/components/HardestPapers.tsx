@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Flame, Filter, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown, Search, X, ExternalLink } from 'lucide-react';
 
 import { buildThresholdRows, hasThresholdData, thresholdsGeneratedAt } from '../data/thresholds';
@@ -15,6 +15,8 @@ const THRESHOLD_DATA: ThresholdRow[] = buildThresholdRows();
 // Unique values for filters
 const BOARDS = ['All Boards', ...Array.from(new Set(THRESHOLD_DATA.map(r => r.board)))];
 const LEVELS = ['All Levels', 'IGCSE', 'AS Level', 'A Level'];
+
+const PAGE_SIZE = 50;
 
 type SortKey = 'difficultyScore' | 'year' | 'subjectName' | 'a' | 'session';
 type SortDir = 'asc' | 'desc';
@@ -52,6 +54,8 @@ export function HardestPapers() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [yearFrom, setYearFrom] = useState(2017);
   const [yearTo, setYearTo] = useState(2026);
+  // Only 50 rows are drawn at a time — drawing thousands at once is what made this page slow
+  const [page, setPage] = useState(0);
 
   // Filtered subjects for dropdown
   const availableSubjects = useMemo(() => {
@@ -104,6 +108,11 @@ export function HardestPapers() {
       return 0;
     });
   }, [selectedBoard, selectedLevel, selectedSubject, search, sortKey, sortDir, yearFrom, yearTo]);
+
+  useEffect(() => { setPage(0); }, [selectedBoard, selectedLevel, selectedSubject, search, sortKey, sortDir, yearFrom, yearTo]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const SortIcon = ({ k }: { k: SortKey }) => {
     if (sortKey !== k) return <ArrowUpDown size={13} style={{ opacity: 0.4 }} />;
@@ -250,12 +259,12 @@ export function HardestPapers() {
             <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>{hasThresholdData() ? 'No papers match your filters. Try adjusting the subject or year range.' : 'Cambridge threshold data has not been loaded yet. Run the "Update Cambridge thresholds" action on GitHub once.'}</p>
           </div>
         ) : (
-          filtered.map((row, i) => {
+          pageRows.map((row, i) => {
             const badge = getDifficultyBadge(row.difficultyScore);
             const aPct = ((row.a / row.maxMarks) * 100).toFixed(0);
             return (
               <div key={`${row.subjectCode}_${row.session}_${row.year}_${row.component}`}
-                style={{ display: 'grid', gridTemplateColumns: '2fr 80px 80px 80px 80px 110px 60px 60px 60px 60px 60px 100px', gap: 0, padding: '13px 20px', borderBottom: i < filtered.length - 1 ? '1px solid var(--border-dim)' : 'none', transition: 'background 0.15s', animation: `fade-up 0.3s ${Math.min(i * 0.02, 0.3)}s both`, alignItems: 'center' }}
+                style={{ display: 'grid', gridTemplateColumns: '2fr 80px 80px 80px 80px 110px 60px 60px 60px 60px 60px 100px', gap: 0, padding: '13px 20px', borderBottom: i < pageRows.length - 1 ? '1px solid var(--border-dim)' : 'none', transition: 'background 0.15s', animation: `fade-up 0.3s ${Math.min(i * 0.02, 0.3)}s both`, alignItems: 'center' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
@@ -305,6 +314,22 @@ export function HardestPapers() {
           })
         )}
       </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button onClick={() => setPage(Math.max(0, safePage - 1))} disabled={safePage === 0}
+            style={{ padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: safePage === 0 ? 'default' : 'pointer', opacity: safePage === 0 ? 0.4 : 1, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)' }}>
+            ← Previous
+          </button>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} · page {safePage + 1}/{totalPages}
+          </span>
+          <button onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))} disabled={safePage >= totalPages - 1}
+            style={{ padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: safePage >= totalPages - 1 ? 'default' : 'pointer', opacity: safePage >= totalPages - 1 ? 0.4 : 1, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-dim)', color: 'var(--text-primary)' }}>
+            Next →
+          </button>
+        </div>
+      )}
 
       <p style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
         Official Cambridge International grade threshold tables{thresholdsGeneratedAt() ? ` · last updated ${thresholdsGeneratedAt()!.slice(0,10)}` : ''}. Difficulty % = (A threshold ÷ max marks) × 100 — lower means a harder paper.
