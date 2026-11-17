@@ -125,19 +125,22 @@ def subject_codes():
 
 
 def series_pages(index_url):
-    """All 'march-2026' style pages for one index page."""
+    """{(month, year): [candidate page urls]} for one index page."""
     found = {}
     html = http_get(index_url)
     if html:
         for href in re.findall(r'href="([^"]+)"', html):
             m = re.search(r"/grade-threshold-tables/(march|june|november)-?(\d{4})/?$", href, re.I)
             if m:
-                found[(m.group(1).lower(), int(m.group(2)))] = urllib.parse.urljoin(index_url, href)
-    # also try the predictable addresses, in case the index page did not list them
+                found.setdefault((m.group(1).lower(), int(m.group(2))), []).append(urllib.parse.urljoin(index_url, href))
+    # also try the predictable addresses (Cambridge uses both "june-2022" and "june2022")
     this_year = datetime.date.today().year
     for y in range(MIN_YEAR, this_year + 1):
         for month in ("march", "june", "november"):
-            found.setdefault((month, y), f"{index_url}/{month}-{y}")
+            c = found.setdefault((month, y), [])
+            for url in (f"{index_url}/{month}-{y}", f"{index_url}/{month}{y}", f"{index_url}/{month}-{y}/"):
+                if url not in c:
+                    c.append(url)
     return {k: v for k, v in found.items() if k[1] >= MIN_YEAR}
 
 
@@ -163,12 +166,17 @@ def main():
     report, missing = [], []
     for kind, index_url in INDEX_PAGES.items():
         print(f"\n== {kind.upper()} ==")
-        for (month, year), page_url in sorted(series_pages(index_url).items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        for (month, year), candidates in sorted(series_pages(index_url).items(), key=lambda kv: (kv[0][1], kv[0][0])):
             session = SESSION_OF[month]
             series = f"{year}-{session}"
-            html = http_get(page_url)
+            html, page_url = None, candidates[0]
+            for page_url in candidates:
+                html = http_get(page_url)
+                if html:
+                    break
             if not html:
-                continue  # that series does not exist (yet)
+                print(f"-- {month.title()} {year}: no page found (not published, or a different address)")
+                continue
             links = pdf_links(html, page_url)
             if not links:
                 print(f"-- {month.title()} {year}: page found but no PDF links (page layout changed?)")
