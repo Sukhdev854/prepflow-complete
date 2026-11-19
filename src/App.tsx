@@ -83,22 +83,29 @@ async function cloudLoad(userId: string) {
   } catch (e) { console.error('cloudLoad error', e); return { profile:null, streak:null, progress:null as ProgressEntry[]|null }; }
 }
 
+// The most recent save problem, shown on the red "couldn't save" pill so we can see what is wrong
+let lastSyncError = '';
+const describeError = (what: string, e: any) => {
+  const msg = (e && (e.message || e.details || e.hint)) ? String(e.message || e.details || e.hint) : String(e);
+  lastSyncError = `${what}: ${msg}${e?.code ? ` (code ${e.code})` : ''}`.slice(0, 220);
+};
+
 async function cloudSaveProfile(userId: string, profile: StudentProfile): Promise<boolean> {
   try {
     const { error } = await supabase.from('student_profiles')
       .upsert({ user_id:userId, profile_data:profile, updated_at:new Date().toISOString() }, { onConflict:'user_id' });
-    if (error) { console.error('cloudSaveProfile error', error); return false; }
+    if (error) { console.error('cloudSaveProfile error', error); describeError('profile', error); return false; }
     return true;
-  } catch(e) { console.error('cloudSaveProfile error',e); return false; }
+  } catch(e) { console.error('cloudSaveProfile error',e); describeError('profile', e); return false; }
 }
 
 async function cloudSaveStreak(userId: string, streak: StreakData): Promise<boolean> {
   try {
     const { error } = await supabase.from('student_profiles')
       .upsert({ user_id:userId, streak_data:streak, updated_at:new Date().toISOString() }, { onConflict:'user_id' });
-    if (error) { console.error('cloudSaveStreak error', error); return false; }
+    if (error) { console.error('cloudSaveStreak error', error); describeError('streak', error); return false; }
     return true;
-  } catch(e) { console.error('cloudSaveStreak error',e); return false; }
+  } catch(e) { console.error('cloudSaveStreak error',e); describeError('streak', e); return false; }
 }
 
 // ── Safe progress sync ──
@@ -118,11 +125,18 @@ async function syncProgressToCloud(userId: string, entries: ProgressEntry[]): Pr
 
     for (let i = 0; i < toUpsert.length; i += 200) {
       const chunk = toUpsert.slice(i, i + 200);
-      const { error } = await supabase.from('progress_entries').upsert(
-        chunk.map(e => ({ user_id:userId, entry_id:e.id, entry_data:e, created_at:e.date })),
-        { onConflict:'user_id,entry_id' }
-      );
-      if (error) throw error;
+      const rows = chunk.map(e => ({ user_id:userId, entry_id:e.id, entry_data:e, created_at:e.date }));
+      const { error } = await supabase.from('progress_entries').upsert(rows, { onConflict:'user_id,entry_id' });
+      if (error) {
+        if ((error as any).code !== '42P10') throw error;
+        // 42P10 = the database has no "one row per entry" rule yet (migration not run).
+        // Fall back to replacing just THESE rows (delete + insert) so saving still works.
+        const ids = chunk.map(e => e.id);
+        const del = await supabase.from('progress_entries').delete().eq('user_id', userId).in('entry_id', ids);
+        if (del.error) throw del.error;
+        const ins = await supabase.from('progress_entries').insert(rows);
+        if (ins.error) throw ins.error;
+      }
       chunk.forEach(e => cloudKnown.set(e.id, JSON.stringify(e)));
     }
     for (let i = 0; i < toDelete.length; i += 50) {
@@ -132,7 +146,7 @@ async function syncProgressToCloud(userId: string, entries: ProgressEntry[]): Pr
       chunk.forEach(id => cloudKnown.delete(id));
     }
     return true;
-  } catch (e) { console.error('syncProgressToCloud error', e); return false; }
+  } catch (e) { console.error('syncProgressToCloud error', e); describeError('progress', e); return false; }
 }
 
 // ─── Streak helpers ───────────────────────────────────────────────────────────
@@ -158,6 +172,7 @@ export default function App() {
   const [loading,     setLoading]     = useState(true);
   const [syncing,     setSyncing]     = useState(false);
   const [syncError,   setSyncError]   = useState(false);
+  const [syncDetail,  setSyncDetail]  = useState('');
   const [showAuth,    setShowAuth]    = useState(false);
 
   // Refs always hold the latest values (so callbacks never use stale data)
@@ -174,6 +189,7 @@ export default function App() {
   const markSync = useCallback((kind: string, ok: boolean) => {
     if (ok) failing.current.delete(kind); else failing.current.add(kind);
     setSyncError(failing.current.size > 0);
+    setSyncDetail(ok ? '' : lastSyncError);
   }, []);
 
   // Queue a safe, ordered progress sync. A "dirty" flag is kept on this device until the
@@ -335,8 +351,9 @@ export default function App() {
       )}
       {syncError && !syncing && (
         <button onClick={retrySync} title="Tap to retry"
-          style={{ position:'fixed',bottom:20,right:20,zIndex:999,padding:'8px 14px',borderRadius:99,background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.4)',fontSize:11,color:'#f87171',cursor:'pointer',backdropFilter:'blur(8px)' }}>
-          ⚠ Couldn't save to cloud — tap to retry
+          style={{ position:'fixed',bottom:20,right:20,zIndex:999,maxWidth:340,textAlign:'left',padding:'10px 16px',borderRadius:16,background:'rgba(239,68,68,0.15)',border:'1px solid rgba(239,68,68,0.4)',fontSize:11,color:'#f87171',cursor:'pointer',backdropFilter:'blur(8px)' }}>
+          <div>⚠ Couldn't save to cloud — tap to retry</div>
+          {syncDetail && <div style={{ marginTop:4, fontSize:10, opacity:0.85, wordBreak:'break-word' }}>{syncDetail}</div>}
         </button>
       )}
 
